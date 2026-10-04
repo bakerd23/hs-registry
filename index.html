@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>High School Registry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+[hidden]{display:none!important}
+img{max-width:100%}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+/* Layout: work queue on the left, the one school being decided on the right; Hokie maroon for actions, orange for "needs a decision". */
+:root{
+  --bg:#f7f5f4; --panel:#ffffff; --ink:#22191c; --muted:#6f6266; --line:#e4dcdd; --soft:#f0eaeb;
+  --accent:#861f41; --accent-ink:#ffffff; --accent-soft:#f5e6eb; --flag:#c75b12; --flag-soft:#fbeadc;
+  --good:#2f7a4f; --good-soft:#e2f1e7; --bad:#a23a2a;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171214; --panel:#211a1d; --ink:#f1e9eb; --muted:#ab9ca1; --line:#3a2f33; --soft:#2a2125;
+  --accent:#d0587f; --accent-ink:#1a0f13; --accent-soft:#3c1f2a; --flag:#f0954c; --flag-soft:#3d2817;
+  --good:#6fc493; --good-soft:#1d3327; --bad:#f08a78; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171214; --panel:#211a1d; --ink:#f1e9eb; --muted:#ab9ca1; --line:#3a2f33; --soft:#2a2125;
+  --accent:#d0587f; --accent-ink:#1a0f13; --accent-soft:#3c1f2a; --flag:#f0954c; --flag-soft:#3d2817;
+  --good:#6fc493; --good-soft:#1d3327; --bad:#f08a78; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);padding-inline:16px;padding-block:14px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}
+h1{font-size:22px;letter-spacing:.01em}
+h2{font-size:18px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 11px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px;min-width:0}
+kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--muted);background:var(--soft)}
+
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+.sub{color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{border:none;background:none;padding:6px 10px;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-size:13px}
+.stat b{font-family:var(--mono);font-weight:500;font-size:15px}
+.bar{flex:1 1 220px;height:8px;border-radius:4px;background:var(--soft);overflow:hidden;display:flex;min-width:160px}
+.bar span{display:block;height:100%}
+.banner{padding:8px 12px;border-radius:6px;background:var(--flag-soft);color:var(--ink);border:1px solid var(--flag)}
+
+.grid{display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.filters{display:flex;flex-direction:column;gap:8px;padding:10px;border-bottom:1px solid var(--line)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.row > input{flex:1 1 120px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:none;border-radius:0;padding:4px 10px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.qlist{max-height:68vh;overflow:auto;list-style:none;margin:0;padding:0}
+.qlist li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.qlist li:hover{background:var(--soft)}
+.qlist li[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.qlist .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qmore{padding:8px 10px;font-size:13px}
+.src{font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:3px 5px;border-radius:4px;background:var(--soft);color:var(--muted)}
+.src.va{background:var(--flag-soft);color:var(--flag)}
+.src.espn{background:var(--accent-soft);color:var(--accent)}
+.n{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+.work{padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.subject{display:flex;flex-direction:column;gap:6px}
+.subject h2{font-size:24px;word-break:break-word}
+.facts{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.facts b{color:var(--ink);font-weight:500}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.label{font:600 11px/1 var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.cands{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.cand{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line)}
+.cand:last-child{border-bottom:none}
+.cand:hover{background:var(--soft)}
+.cand .key{font-family:var(--mono);color:var(--muted);text-align:center}
+.cand .title{font-weight:600}
+.cand .meta{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.chip{font-size:12px;border:1px solid var(--line);border-radius:12px;padding:1px 8px;display:inline-flex;gap:5px;align-items:center;max-width:100%}
+.chip.hint{border-color:var(--good);background:var(--good-soft)}
+.score{width:44px;height:5px;border-radius:3px;background:var(--soft);overflow:hidden;display:inline-block;vertical-align:middle}
+.score i{display:block;height:100%;background:var(--accent)}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.empty h2{color:var(--ink);margin-bottom:6px}
+.searchbox{display:flex;flex-direction:column;gap:8px}
+
+.linked{padding:12px;display:flex;flex-direction:column;gap:10px}
+.school{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.school .head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.alias{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px}
+.alias button{padding:2px 8px;font-size:12px}
+.prose{padding:16px;max-width:72ch;display:flex;flex-direction:column;gap:10px}
+.prose code{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:1px 4px;border-radius:4px}
+.prose pre{font-family:var(--mono);font-size:12.5px;background:var(--soft);padding:10px;border-radius:6px;overflow-x:auto;margin:0}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 12px;border-radius:8px;display:flex;gap:10px;align-items:center;max-width:calc(100% - 32px);font-size:13px}
+.toast button{background:transparent;color:var(--bg);border-color:var(--muted);padding:2px 8px}
+@media (prefers-reduced-motion:no-preference){.qlist li,.cand{transition:background .12s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>High School Registry</h1>
+      <div class="sub" id="sub">Link each way a recruiting service writes a school to one CEEB code.</div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-queue" aria-selected="true" data-tab="queue">Queue</button>
+      <button role="tab" id="tab-linked" aria-selected="false" data-tab="linked">Linked schools</button>
+      <button role="tab" id="tab-export" aria-selected="false" data-tab="export">Export</button>
+    </nav>
+  </header>
+
+  <div class="stats" id="stats"><span class="muted">Loading school names…</span></div>
+  <div class="banner" id="banner" hidden></div>
+
+  <section id="view-queue" class="grid">
+    <aside class="panel">
+      <div class="filters">
+        <div class="row">
+          <div class="seg" id="srcseg" role="group" aria-label="Source"></div>
+          <select id="stateSel" aria-label="State"><option value="">All states</option></select>
+        </div>
+        <div class="row"><input id="qsearch" type="search" placeholder="Filter names" aria-label="Filter queue by name"></div>
+        <div class="n" id="qcount"></div>
+      </div>
+      <ul class="qlist" id="qlist"></ul>
+    </aside>
+    <main class="panel work" id="work">
+      <div class="empty"><h2>Loading the queue</h2><p>School names from Verified and ESPN will appear here.</p></div>
+    </main>
+  </section>
+
+  <section id="view-linked" class="panel" hidden>
+    <div class="filters">
+      <div class="row">
+        <select id="lstate" aria-label="State"><option value="">All states</option></select>
+        <select id="lkind" aria-label="Kind">
+          <option value="match">Linked to a school</option>
+          <option value="research">Needs research (not in CEEB list)</option>
+          <option value="nohs">Marked not a high school</option>
+        </select>
+        <input id="lsearch" type="search" placeholder="Search names or CEEB code" aria-label="Search linked schools">
+      </div>
+      <div class="n" id="lcount"></div>
+    </div>
+    <div class="linked" id="linked"></div>
+  </section>
+
+  <section id="view-export" class="panel" hidden>
+    <div class="prose">
+      <h2>Export for BigQuery</h2>
+      <p>The download holds every decision the team has made, with the source name, the CEEB code, who decided, and when. It holds no player data. The same decisions live in the team's Google Sheet.</p>
+      <div class="actions">
+        <button class="primary" id="dlJson">Download decisions (JSON)</button>
+        <button id="dlCsv">Download alias table (CSV)</button>
+      </div>
+      <div id="dlmsg" class="muted"></div>
+      <p>To build the BigQuery tables, save the JSON into <code>hs_registry/exports/</code> and run:</p>
+      <pre>py hs_registry/export_bigquery.py hs_registry/exports/&lt;file&gt;.json</pre>
+      <p>That writes <code>hs_master</code> (one row per active CEEB high school, with one column per source listing every name it uses and a blank <code>vt_name</code>) and <code>hs_alias</code> (one row per linked source name, used to relabel incoming data), plus BigQuery schema files. Names marked <b>needs research</b> go to a separate <code>hs_research.csv</code> and stay out of both tables until they're resolved.</p>
+      <h3>Keyboard</h3>
+      <p><kbd>1</kbd>–<kbd>9</kbd> link to that school · <kbd>R</kbd> needs research (not in CEEB list) · <kbd>X</kbd> not a high school · <kbd>S</kbd> skip for now · <kbd>Z</kbd> undo your last decision · <kbd>/</kbd> search the CEEB list</p>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script>
+const NAMES = {va:"Verified", espn:"ESPN", "247":"247Sports", on3:"On3"};
+const DROP = new Set("high school hs h s sch schl senior sr the of and secondary jr junior shs hsch".split(" "));
+const EXPAND = {acad:"academy",academ:"academy",prep:"preparatory",st:"saint",ste:"sainte",mt:"mount",ft:"fort",cath:"catholic",cathol:"catholic",chr:"christian",chrstn:"christian",christ:"christian",cmty:"community",comm:"community",ctr:"center",cntr:"center",twp:"township",regl:"regional",reg:"regional",rgnl:"regional",co:"county",cnty:"county",intl:"international",hts:"heights",jt:"joint",n:"north",e:"east",w:"west",no:"north",so:"south",cent:"central",ctrl:"central",mem:"memorial",meml:"memorial",tech:"technical",voc:"vocational",magn:"magnet",inst:"institute",ind:"independent",isd:"independent",pk:"park",spgs:"springs",vly:"valley",lk:"lake",hls:"hills",bch:"beach"};
+function norm(s){
+  s = String(s||"").normalize("NFKD").replace(/[̀-ͯ]/g,"").replace(/\s*\([^()]*\)\s*$/,"").toLowerCase()
+      .replace(/&/g," and ").replace(/'s\b/g,"s").replace(/[^a-z0-9 ]/g," ");
+  return s.split(/\s+/).filter(Boolean).map(t=>EXPAND[t]||t).filter(t=>!DROP.has(t)).join(" ");
+}
+
+const S = {
+  aliases:[], byId:{}, dec:{}, links:{}, ceeb:{}, ceebWait:{},
+  db:null, user:null, uid:null, canWrite:null, live:false,
+  src:"all", st:"", q:"", cur:null, skipped:new Set(), shown:150, last:null, tab:"queue",
+  lst:"", lkind:"match", lq:"", builtAt:"", searchQ:"", searchSt:"", writing:Promise.resolve()
+};
+const $ = id => document.getElementById(id);
+const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)) { if (k==="class") e.className=v; else if (k.startsWith("on")) e.addEventListener(k.slice(2),v); else if (v!==false && v!=null) e.setAttribute(k,v===true?"":v); }
+  for (const k of kids.flat()) if (k!=null && k!==false) e.append(k.nodeType?k:String(k)); return e; };
+const srcTag = s => el("span",{class:"src "+s},s==="va"?"VA":s.toUpperCase());
+
+/* ---------- data ---------- */
+async function loadCeeb(st){
+  if (!st) return null;
+  if (S.ceeb[st]) return S.ceeb[st];
+  if (!S.ceebWait[st]) S.ceebWait[st] = fetch("data/ceeb/"+encodeURIComponent(st)+".json").then(r=>r.ok?r.json():[]).catch(()=>[]).then(rows=>{
+    const m = {}; for (const [c,name,city,zip,detail,addr] of rows) m[c]={c,name,city,zip,detail,addr,st,n:norm(name)};
+    S.ceeb[st]=m; return m; });
+  return S.ceebWait[st];
+}
+function ceebInfo(code){ for (const m of Object.values(S.ceeb)) if (m[code]) return m[code]; return null; }
+function isOpen(id){ const d=S.dec[id]; return !d || d.s==="open"; }
+function rebuildLinks(){
+  const L={}; for (const [id,d] of Object.entries(S.dec)) if (d && d.s==="match" && d.c) (L[d.c] ||= []).push(id);
+  S.links=L;
+}
+function targetLabel(code){
+  const i=ceebInfo(code); return i?{name:i.name, city:i.city, zip:i.zip}:{name:"CEEB "+code, city:""};
+}
+
+async function init(){
+  try {
+    const r = await fetch("data/aliases.json"); const d = await r.json();
+    S.builtAt = d.built_at; const cols=d.columns;
+    S.aliases = d.aliases.map(row=>{ const o={}; cols.forEach((c,i)=>o[c]=row[i]); return o; });
+    for (const a of S.aliases) { a.shard = (a.state||"XX")+"-"+(parseInt(a.alias_id[0],16)%4); S.byId[a.alias_id]=a; }
+    const states=[...new Set(S.aliases.map(a=>a.state).filter(Boolean))].sort();
+    for (const sel of [$("stateSel"),$("lstate")]) for (const s of states) sel.append(el("option",{value:s},s));
+    const seg=$("srcseg");
+    for (const s of ["all",...d.sources]) seg.append(el("button",{"aria-pressed":String(s===S.src),"data-src":s,onclick:()=>{S.src=s;S.shown=150;[...seg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.src===s)));renderQueue();pickNext(true);}},s==="all"?"All":(NAMES[s]||s)));
+    $("sub").textContent = `Link each way a recruiting service writes a school to one CEEB code. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
+  } catch(e) { $("work").replaceChildren(el("div",{class:"empty"},el("h2",{},"The school list didn't load"),el("p",{},"Reload the page. If it keeps failing, the data files may be missing from the site."))); return; }
+  renderAll(); pickNext(true);
+  connect();
+}
+
+/* ---------- shared store: Google Apps Script web app (see apps_script/Code.gs) ---------- */
+const CFG = window.HSR_CONFIG || {};
+const store = { get(k){ try { return localStorage.getItem(k)||""; } catch(e){ return ""; } },
+                set(k,v){ try { localStorage.setItem(k,v); } catch(e){} } };
+S.pending = {}; S.since = 0; S.name = store.get("hsr_name"); S.key = store.get("hsr_key");
+
+async function api(params, body){
+  const url = CFG.endpoint + (params ? "?" + new URLSearchParams(params) : "");
+  // A string body goes as text/plain, which Apps Script accepts without a CORS preflight.
+  const r = await fetch(url, body ? {method:"POST", body:JSON.stringify(body)} : {});
+  if (!r.ok) throw {code:"unavailable"};
+  const d = await r.json();
+  if (!d.ok) throw {code:d.error||"error"};
+  return d;
+}
+async function connect(){
+  if (!CFG.endpoint) { banner("This copy isn't connected to the team's decision sheet yet. Add the Apps Script URL to config.js."); S.canWrite=false; renderAll(); return; }
+  if (!S.name || !S.key) { showJoin(); return; }
+  try { await sync(true); }
+  catch(e){ if (e.code==="bad_passcode") { showJoin("That passcode didn't work. Check it with whoever set up the sheet."); return; }
+            banner("Couldn't reach the team's decision sheet. Check your connection and reload."); return; }
+  S.db = true; S.canWrite = true; $("banner").hidden = true; renderWho(); renderAll();
+  setInterval(()=>{ if (!document.hidden) sync().catch(()=>{}); }, 15000);
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) sync().catch(()=>{}); });
+}
+async function sync(full){
+  // Re-read a 30-second overlap so a save that lands mid-read is never missed.
+  const d = await api({key:S.key, since: full ? 0 : Math.max(0, S.since - 30000)});
+  const dec = full ? {} : {...S.dec};
+  for (const r of d.rows) if (!S.pending[r.id]) dec[r.id] = {s:r.s, c:r.c||undefined, u:r.u, t:r.t};
+  S.since = d.now; S.dec = dec; S.live = true; rebuildLinks();
+  if (S.cur && !isOpen(S.cur)) pickNext(); else renderAll();
+}
+function showJoin(err){
+  const b=$("banner"); b.hidden=false;
+  const nm=el("input",{id:"joinName",placeholder:"Your name",value:S.name,"aria-label":"Your name"});
+  const pw=el("input",{id:"joinKey",type:"password",placeholder:"Team passcode",value:"","aria-label":"Team passcode"});
+  const go=el("button",{class:"primary",type:"submit"},"Start matching");
+  const form=el("form",{class:"row"},nm,pw,go);
+  form.addEventListener("submit",e=>{ e.preventDefault(); if(!nm.value.trim()||!pw.value) return;
+    S.name=nm.value.trim(); S.key=pw.value; store.set("hsr_name",S.name); store.set("hsr_key",S.key);
+    b.replaceChildren(el("span",{},"Connecting…")); connect(); });
+  b.replaceChildren(el("div",{},err?el("p",{style:"margin:0 0 6px"},err):el("p",{style:"margin:0 0 6px"},"Enter your name and the team passcode to save decisions. Your name is recorded with each match.")), form);
+  S.canWrite=false; renderAll();
+}
+function renderWho(){
+  const sub=$("sub"); sub.querySelector(".who")?.remove();
+  sub.append(el("span",{class:"who"}," · Matching as ",el("b",{},S.name)," ",
+    el("button",{style:"padding:0 6px;font-size:12px",onclick:()=>{ S.db=null; showJoin(); }},"Change")));
+}
+function banner(msg){ const b=$("banner"); b.textContent=msg; b.hidden=false; }
+
+/* ---------- writing decisions ---------- */
+function decide(id, rec, {undoable=true, quiet=false}={}){
+  if (!S.db || S.canWrite===false) { toast("Enter your name and the team passcode to save decisions."); return Promise.resolve(false); }
+  const prev=S.dec[id]||{s:"open"};
+  const body={...rec, u:S.name, t:new Date().toISOString()};
+  S.dec={...S.dec,[id]:body}; rebuildLinks();          // optimistic; the next sync confirms it
+  S.pending[id]=(S.pending[id]||0)+1;
+  if (undoable) S.last={id, prev};
+  const send = async()=>{
+    const change={id, s:rec.s, c:rec.c||""};
+    try { await api(null,{key:S.key, name:S.name, changes:[change]}); }
+    catch(e){ if (e.code!=="unavailable") throw e; await new Promise(r=>setTimeout(r,800+Math.random()*800)); await api(null,{key:S.key, name:S.name, changes:[change]}); }
+    return true;
+  };
+  const p = S.writing.then(send).catch(e=>{
+      S.dec={...S.dec,[id]:prev}; rebuildLinks(); renderAll();
+      toast(e.code==="bad_passcode" ? "The team passcode changed. Click Change next to your name and re-enter it." : "That decision didn't save. Try again.");
+      return false; })
+    .finally(()=>{ if (--S.pending[id]<=0) delete S.pending[id]; });
+  S.writing=p.then(()=>{},()=>{});
+  if (!quiet) toast(describe(id, body), undoable);
+  return p;
+}
+function describe(id, d){
+  const n=S.byId[id].source_name;
+  if (d.s==="match") return `Linked “${n}” to ${targetLabel(d.c).name}`;
+  if (d.s==="research") return `Sent “${n}” to the research list`;
+  if (d.s==="nohs") return `Marked “${n}” as not a high school`;
+  return `Returned “${n}” to the queue`;
+}
+function undo(){
+  if (!S.last) return; const {id,prev}=S.last; S.last=null;
+  decide(id, {s:prev.s, ...(prev.c?{c:prev.c}:{})}, {undoable:false, quiet:true}).then(ok=>{ if(ok){ toast(`Undid the decision on “${S.byId[id].source_name}”`); S.cur=id; renderAll(); }});
+  S.cur=id; renderAll();
+}
+let toastTimer;
+function toast(msg, withUndo){
+  const t=$("toast"); t.replaceChildren(el("span",{},msg)); if (withUndo) t.append(el("button",{onclick:undo},"Undo"));
+  t.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.hidden=true, 5000);
+}
+
+/* ---------- queue ---------- */
+function queue(){
+  const q=norm(S.q); const raw=S.q.trim().toLowerCase();
+  return S.aliases.filter(a=>isOpen(a.alias_id) && (S.src==="all"||a.source===S.src) && (!S.st||a.state===S.st)
+    && (!raw || a.source_name.toLowerCase().includes(raw) || (q && norm(a.source_name).includes(q))));
+}
+function pickNext(reset){
+  const list=queue().filter(a=>!S.skipped.has(a.alias_id));
+  if (reset || !S.cur || !isOpen(S.cur)) S.cur = (list[0]||queue()[0]||{}).alias_id || null;
+  S.searchQ=""; S.searchSt=""; renderAll();
+}
+function renderQueue(){
+  const list=queue(); const ul=$("qlist"); ul.replaceChildren();
+  $("qcount").textContent = `${list.length.toLocaleString()} name${list.length===1?"":"s"} waiting${S.skipped.size?` · ${S.skipped.size} skipped this visit`:""}`;
+  for (const a of list.slice(0,S.shown)) {
+    ul.append(el("li",{"aria-current":String(a.alias_id===S.cur), title:a.source_name, onclick:()=>{S.cur=a.alias_id; S.searchQ=""; S.searchSt=""; renderAll();}},
+      srcTag(a.source), el("span",{class:"nm"},a.source_name, S.skipped.has(a.alias_id)?el("span",{class:"muted"}," · skipped"):null), el("span",{class:"n",title:"Athletes listing this school"},a.n_athletes)));
+  }
+  if (list.length>S.shown) ul.append(el("li",{class:"qmore",onclick:()=>{S.shown+=300;renderQueue();}},el("span"),el("span",{class:"muted"},`Show ${Math.min(300,list.length-S.shown)} more`),el("span")));
+}
+
+async function renderWork(){
+  const w=$("work"); const id=S.cur; const a=S.byId[id];
+  if (!a) { w.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing left in this view"),el("p",{},S.q||S.st||S.src!=="all"?"Clear the filters to see the rest of the queue.":"Every school name has a decision. New Verified names appear after the next refresh."))); return; }
+  const st=a.state||"INTL";
+  const pool=await loadCeeb(st);
+  if (S.cur!==id) return;
+  const hometowns=(a.hometowns||"").split(";").map(s=>s.trim()).filter(Boolean);
+  const facts=el("div",{class:"facts"},
+    el("span",{},NAMES[a.source]||a.source),
+    el("span",{},"State ",el("b",{},a.state||"none given")),
+    a.city?el("span",{},"City ",el("b",{},a.city)):null,
+    a.zip?el("span",{class:"mono"},"ZIP ",el("b",{},a.zip)):null,
+    a.address?el("span",{},el("b",{},a.address)):null,
+    el("span",{},el("b",{class:"mono"},a.n_athletes)," athletes"),
+    hometowns.length?el("span",{},"Athlete hometowns ",el("b",{},hometowns.join(" · "))):null,
+    a.source_school_id?el("span",{class:"mono"},`${NAMES[a.source]||a.source} id ${a.source_school_id.split(";")[0]}`):null);
+
+  // Candidates: schools other sources already linked from look-alike names, then the ranked CEEB matches.
+  const rows=[]; const seen=new Set();
+  for (const pid of a.peers||[]) { const d=S.dec[pid]; if (d && d.s==="match" && !seen.has(d.c)) { seen.add(d.c); rows.push({code:d.c, hint:S.byId[pid]}); } }
+  for (const [code,score] of a.candidates||[]) if (!seen.has(code)) { seen.add(code); rows.push({code,score}); }
+  const shown=rows.slice(0,9);
+  const peersOpen=(a.peers||[]).map(p=>S.byId[p]).filter(p=>p && isOpen(p.alias_id));
+
+  const cands=el("div",{class:"cands"});
+  shown.forEach((r,i)=>cands.append(candRow(r,i+1,id)));
+  if (!shown.length) cands.append(el("div",{class:"cand"},el("span"),el("span",{class:"muted"},a.state?"No close names in this state's CEEB list. Search below, or send it to research.":"This name has no state. Search the CEEB list below."),el("span")));
+
+  const sQ=el("input",{id:"ceebSearch",type:"search",placeholder:"Search the CEEB list by name, city, or code",value:S.searchQ,"aria-label":"Search CEEB list"});
+  const sSt=el("select",{id:"ceebState","aria-label":"State to search"});
+  for (const s of new Set([st,...[...$("stateSel").options].map(o=>o.value).filter(Boolean),"INTL"])) sSt.append(el("option",{value:s, selected:(S.searchSt||st)===s},s));
+  const results=el("div",{class:"cands",id:"searchResults",hidden:true});
+  const runSearch=async()=>{
+    S.searchQ=sQ.value; S.searchSt=sSt.value; const q=sQ.value.trim();
+    if (q.length<2) { results.hidden=true; return; }
+    const m=await loadCeeb(sSt.value); const nq=norm(q); const toks=nq.split(" ").filter(Boolean); const lq=q.toLowerCase();
+    const scored=[];
+    for (const c of Object.values(m||{})) {
+      let sc=0; if (c.c===q) sc=200; else {
+        if (c.name.toLowerCase().includes(lq)) sc+=60; if ((c.city||"").toLowerCase().includes(lq)) sc+=30;
+        for (const t of toks) if (c.n.split(" ").includes(t)) sc+=25; else if (c.n.includes(t)) sc+=10; }
+      if (sc>0) scored.push([sc,c.c]);
+    }
+    scored.sort((x,y)=>y[0]-x[0]);
+    results.replaceChildren(...(scored.length?scored.slice(0,15).map(([,c])=>candRow({code:c},null,id)):[el("div",{class:"cand"},el("span"),el("span",{class:"muted"},`No ${sSt.value} schools match “${q}”.`),el("span"))]));
+    results.hidden=false;
+  };
+  sQ.addEventListener("input",runSearch); sSt.addEventListener("change",runSearch);
+
+  const can=S.canWrite!==false && !!S.db;
+  w.replaceChildren(
+    el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?")), el("h2",{},a.source_name), facts),
+    peersOpen.length?el("div",{class:"chips"},el("span",{class:"label",style:"align-self:center"},"Similar names still waiting"),...peersOpen.map(p=>el("button",{class:"chip",onclick:()=>{S.cur=p.alias_id;renderAll();}},srcTag(p.source),p.source_name))):null,
+    el("div",{class:"label"},"Closest CEEB schools"),
+    cands,
+    el("div",{class:"searchbox"}, el("div",{class:"row"},sSt,sQ), results),
+    el("div",{class:"actions"},
+      el("button",{onclick:()=>decide(id,{s:"research"}),disabled:!can,title:"Can't find it in the active CEEB list. It goes to the research file and stays out of the final tables."},"Needs research ",el("kbd",{},"R")),
+      el("button",{onclick:()=>decide(id,{s:"nohs"}),disabled:!can,title:"A college, middle school, or placeholder like Home Schooled"},"Not a high school ",el("kbd",{},"X")),
+      el("button",{onclick:skip},"Skip for now ",el("kbd",{},"S")),
+      S.last?el("button",{onclick:undo},"Undo last ",el("kbd",{},"Z")):null)
+  );
+  if (S.searchQ) runSearch();
+}
+function skip(){ if (!S.cur) return; S.skipped.add(S.cur); const list=queue().filter(a=>!S.skipped.has(a.alias_id)); S.cur=(list[0]||{}).alias_id||S.cur; renderAll(); }
+
+function candRow(r, key, id){
+  const t=targetLabel(r.code); const info=ceebInfo(r.code);
+  const linked=(S.links[r.code]||[]).map(x=>S.byId[x]).filter(Boolean);
+  const can=S.canWrite!==false && !!S.db;
+  return el("div",{class:"cand"},
+    el("span",{class:"key"},key||""),
+    el("div",{style:"min-width:0"},
+      el("div",{class:"title"},t.name),
+      el("div",{class:"meta"},
+        el("span",{class:"mono"},"CEEB "+r.code),
+        t.city?el("span",{},t.city):null, info&&info.zip?el("span",{class:"mono"},info.zip):null,
+        info&&info.addr?el("span",{},info.addr):null, info&&info.detail?el("span",{},info.detail):null),
+      r.hint?el("div",{class:"chips"},el("span",{class:"chip hint"},srcTag(r.hint.source),`${NAMES[r.hint.source]||r.hint.source}'s “${r.hint.source_name}” is linked here`)):null,
+      linked.length?el("div",{class:"chips"},...linked.slice(0,6).map(x=>el("span",{class:"chip"},srcTag(x.source),x.source_name)), linked.length>6?el("span",{class:"chip"},`+${linked.length-6} more`):null):null),
+    el("div",{class:"right"},
+      r.score!=null?el("span",{class:"score",title:`Name similarity ${r.score} of 100`},el("i",{style:`width:${r.score}%`})):null,
+      el("button",{class:"primary",disabled:!can,onclick:()=>decide(id,{s:"match",c:r.code})},"Same school")));
+}
+
+/* ---------- linked view ---------- */
+async function renderLinked(){
+  const box=$("linked"); const kind=S.lkind; const st=S.lst; const q=S.lq.trim().toLowerCase();
+  if (!S.live && S.db) { box.replaceChildren(el("div",{class:"empty"},"Loading the team's decisions…")); return; }
+  const groups=[];
+  if (kind!=="match") {
+    const ids=Object.entries(S.dec).filter(([id,d])=>d.s===kind && S.byId[id] && (!st||S.byId[id].state===st)).map(([id])=>id);
+    if (ids.length) groups.push({code:null, ids});
+  } else {
+    for (const [code,ids] of Object.entries(S.links)) {
+      if (st && !ids.some(i=>S.byId[i]?.state===st)) continue;
+      groups.push({code, ids});
+    }
+  }
+  const statesNeeded=new Set(groups.flatMap(g=>g.ids.map(i=>S.byId[i]?.state||"INTL")));
+  await Promise.all([...statesNeeded].map(loadCeeb));
+  let shownGroups=groups.filter(g=>!q || (g.code||"").toLowerCase().includes(q) || (g.code && targetLabel(g.code).name.toLowerCase().includes(q)) || g.ids.some(i=>S.byId[i].source_name.toLowerCase().includes(q)));
+  shownGroups.sort((x,y)=>(x.code?targetLabel(x.code).name:"").localeCompare(y.code?targetLabel(y.code).name:""));
+  const nAliases=shownGroups.reduce((s,g)=>s+g.ids.length,0);
+  $("lcount").textContent = kind==="nohs" ? `${nAliases.toLocaleString()} names marked not a high school` : kind==="research" ? `${nAliases.toLocaleString()} names to research` : `${shownGroups.length.toLocaleString()} schools · ${nAliases.toLocaleString()} names`;
+  if (!shownGroups.length) { box.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing here yet"),el("p",{},kind==="match"?"Schools appear here once someone links a name in the queue.":kind==="research"?"Names appear here when someone can't find them in the CEEB list.":"Names marked not a high school appear here."))); return; }
+  box.replaceChildren(...shownGroups.slice(0,200).map(g=>{
+    const t=g.code?targetLabel(g.code):null; const info=g.code?ceebInfo(g.code):null;
+    const sch=el("div",{class:"school"});
+    if (t) sch.append(el("div",{class:"head"},el("h3",{},t.name), el("span",{class:"mono muted"},"CEEB "+g.code), t.city?el("span",{class:"muted"},t.city):null, info&&info.zip?el("span",{class:"mono muted"},info.zip):null));
+    for (const i of g.ids) {
+      const a=S.byId[i]; const d=S.dec[i]; const who=d.u||"Someone";
+      sch.append(el("div",{class:"alias"},srcTag(a.source), el("span",{style:"min-width:0;overflow-wrap:anywhere"},a.source_name, el("span",{class:"muted"},` · ${who}, ${new Date(d.t).toLocaleDateString()}`)),
+        el("button",{disabled:S.canWrite===false||!S.db,onclick:()=>{decide(i,{s:"open"});renderAll();}},"Back to queue")));
+    }
+    return sch;
+  }), ...(shownGroups.length>200?[el("div",{class:"muted"},`Showing the first 200 of ${shownGroups.length}. Filter by state or search to narrow.`)]:[]));
+}
+/* ---------- export ---------- */
+async function exportRows(){
+  const ids=Object.keys(S.dec).filter(id=>S.byId[id] && !isOpen(id));
+  return ids.map(id=>{ const a=S.byId[id], d=S.dec[id];
+    return {alias_id:id, source:a.source, source_school_id:a.source_school_id, source_name:a.source_name, state:a.state,
+      decision:d.s, ceeb_code:d.c||"", decided_by:d.u||"", decided_at:d.t}; });
+}
+function save(filename, data){
+  const url=URL.createObjectURL(new Blob([data],{type:filename.endsWith(".csv")?"text/csv":"application/json"}));
+  const a=el("a",{href:url,download:filename}); document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000); $("dlmsg").textContent=`Downloaded ${filename}.`;
+}
+$("dlJson").onclick=async()=>{ const rows=await exportRows(); const stamp=new Date().toISOString().slice(0,10);
+  save(`hs_decisions_${stamp}.json`, JSON.stringify({exported_at:new Date().toISOString(), queue_built_at:S.builtAt, decisions:rows},null,1)); };
+$("dlCsv").onclick=async()=>{ const rows=await exportRows(); const cols=["alias_id","source","source_school_id","source_name","state","decision","ceeb_code","decided_by","decided_at"];
+  const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
+  save(`hs_alias_${new Date().toISOString().slice(0,10)}.csv`, [cols.join(","),...rows.map(r=>cols.map(c=>q(r[c])).join(","))].join("\n")); };
+
+/* ---------- shell ---------- */
+function renderStats(){
+  const total=S.aliases.length; let m=0,p=0,x=0;
+  for (const a of S.aliases){ const d=S.dec[a.alias_id]; if(!d) continue; if(d.s==="match")m++; else if(d.s==="research")p++; else if(d.s==="nohs")x++; }
+  const open=total-m-p-x; const pct=v=>total?(100*v/total)+"%":"0";
+  const bySrc={}; for (const a of S.aliases){ (bySrc[a.source] ||= [0,0])[0]++; if(!isOpen(a.alias_id)) bySrc[a.source][1]++; }
+  $("stats").replaceChildren(
+    el("span",{class:"stat"},el("b",{},open.toLocaleString())," waiting"),
+    el("span",{class:"stat"},el("b",{},m.toLocaleString())," linked"),
+    el("span",{class:"stat"},el("b",{},p.toLocaleString())," need research"),
+    el("span",{class:"stat"},el("b",{},x.toLocaleString())," not a high school"),
+    el("div",{class:"bar",role:"img","aria-label":`${total-open} of ${total} names decided`},
+      el("span",{style:`width:${pct(m)};background:var(--accent)`}), el("span",{style:`width:${pct(p)};background:var(--flag)`}), el("span",{style:`width:${pct(x)};background:var(--muted)`})),
+    ...Object.entries(bySrc).map(([s,[n,d]])=>el("span",{class:"stat muted"},`${NAMES[s]||s} `,el("b",{},Math.round(100*d/n)+"%"))));
+}
+function renderAll(){ renderStats(); if (S.tab==="queue"){ renderQueue(); renderWork(); } else if (S.tab==="linked") renderLinked(); }
+
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{
+  S.tab=b.dataset.tab; document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",String(x===b)));
+  for (const v of ["queue","linked","export"]) $("view-"+v).hidden = v!==S.tab;
+  renderAll(); });
+$("stateSel").onchange=e=>{S.st=e.target.value;S.shown=150;pickNext(true);};
+let qt; $("qsearch").oninput=e=>{clearTimeout(qt); qt=setTimeout(()=>{S.q=e.target.value;S.shown=150;pickNext(true);},150);};
+$("lstate").onchange=e=>{S.lst=e.target.value;renderLinked();};
+$("lkind").onchange=e=>{S.lkind=e.target.value;renderLinked();};
+let lt; $("lsearch").oninput=e=>{clearTimeout(lt); lt=setTimeout(()=>{S.lq=e.target.value;renderLinked();},150);};
+document.addEventListener("keydown",e=>{
+  if (S.tab!=="queue" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag=(e.target.tagName||"").toLowerCase(); if (tag==="input"||tag==="select"||tag==="textarea") { if (e.key==="Escape") e.target.blur(); return; }
+  const id=S.cur; if (!id) return;
+  if (/^[1-9]$/.test(e.key)) { const btn=$("work").querySelectorAll(".cands:not(#searchResults) .cand button.primary")[+e.key-1]; if (btn && !btn.disabled) { e.preventDefault(); btn.click(); } }
+  else if (e.key==="r"||e.key==="R") { e.preventDefault(); if (S.canWrite!==false && S.db) decide(id,{s:"research"}); }
+  else if (e.key==="x"||e.key==="X") { e.preventDefault(); if (S.canWrite!==false && S.db) decide(id,{s:"nohs"}); }
+  else if (e.key==="s"||e.key==="S") { e.preventDefault(); skip(); }
+  else if (e.key==="z"||e.key==="Z") { e.preventDefault(); undo(); }
+  else if (e.key==="/") { e.preventDefault(); $("ceebSearch")?.focus(); }
+});
+init();
+</script>
+</body>
+</html>
