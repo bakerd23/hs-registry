@@ -88,7 +88,11 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 .cand:last-child{border-bottom:none}
 .cand:hover{background:var(--soft)}
 .cand .key{font-family:var(--mono);color:var(--muted);text-align:center}
-.cand .title{font-weight:600}
+.cand .title{font-weight:600;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.exact{font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:3px 6px;border-radius:4px;background:var(--good-soft);color:var(--good)}
+.twins{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px dashed var(--line);border-radius:8px;background:var(--soft)}
+.twin{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13px}
+.tags{display:flex;gap:3px}
 .cand .meta{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px}
 .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .chip{font-size:12px;border:1px solid var(--line);border-radius:12px;padding:1px 8px;display:inline-flex;gap:5px;align-items:center;max-width:100%}
@@ -217,6 +221,8 @@ async function loadCeeb(st){
 }
 function ceebInfo(code){ for (const m of Object.values(S.ceeb)) if (m[code]) return m[code]; return null; }
 function isOpen(id){ const d=S.dec[id]; return !d || d.s==="open"; }
+// Names that are the same school written two ways (build_queue.groups) are decided together.
+function openMembers(id){ const a=S.byId[id]; return a ? S.members[a.group].filter(isOpen) : []; }
 function rebuildLinks(){
   const L={}; for (const [id,d] of Object.entries(S.dec)) if (d && d.s==="match" && d.c) (L[d.c] ||= []).push(id);
   S.links=L;
@@ -230,7 +236,8 @@ async function init(){
     const r = await fetch("data/aliases.json"); const d = await r.json();
     S.builtAt = d.built_at; const cols=d.columns;
     S.aliases = d.aliases.map(row=>{ const o={}; cols.forEach((c,i)=>o[c]=row[i]); return o; });
-    for (const a of S.aliases) { a.shard = (a.state||"XX")+"-"+(parseInt(a.alias_id[0],16)%4); S.byId[a.alias_id]=a; }
+    S.members={}; S.groupN={};
+    for (const a of S.aliases) { a.group ||= a.alias_id; S.byId[a.alias_id]=a; (S.members[a.group] ||= []).push(a.alias_id); S.groupN[a.group]=(S.groupN[a.group]||0)+(+a.n_athletes||0); }
     const states=[...new Set(S.aliases.map(a=>a.state).filter(Boolean))].sort();
     for (const sel of [$("stateSel"),$("lstate")]) for (const s of states) sel.append(el("option",{value:s},s));
     const seg=$("srcseg");
@@ -294,39 +301,42 @@ function renderWho(){
 function banner(msg){ const b=$("banner"); b.textContent=msg; b.hidden=false; }
 
 /* ---------- writing decisions ---------- */
-function decide(id, rec, {undoable=true, quiet=false}={}){
+function decide(id, rec, opts){ const ids=openMembers(id); return decideIds(ids.length?ids:[id], rec, opts); }
+function decideIds(ids, rec, {undoable=true, quiet=false}={}){
   if (!S.db || S.canWrite===false) { toast("Enter your name and the team passcode to save decisions."); return Promise.resolve(false); }
-  const prev=S.dec[id]||{s:"open"};
+  const prev={}; for (const id of ids) prev[id]=S.dec[id]||{s:"open"};
   const body={...rec, u:S.name, t:new Date().toISOString()};
-  S.dec={...S.dec,[id]:body}; rebuildLinks();          // optimistic; the next sync confirms it
-  S.pending[id]=(S.pending[id]||0)+1;
-  if (undoable) S.last={id, prev};
+  const dec={...S.dec}; for (const id of ids) { dec[id]=body; S.pending[id]=(S.pending[id]||0)+1; }
+  S.dec=dec; rebuildLinks();                              // optimistic; the next sync confirms it
+  if (undoable) S.last={ids, prev};
+  const changes=ids.map(id=>({id, s:rec.s, c:rec.c||""}));
   const send = async()=>{
-    const change={id, s:rec.s, c:rec.c||""};
-    try { await api(null,{key:S.key, name:S.name, changes:[change]}); }
-    catch(e){ if (e.code!=="unavailable") throw e; await new Promise(r=>setTimeout(r,800+Math.random()*800)); await api(null,{key:S.key, name:S.name, changes:[change]}); }
+    try { await api(null,{key:S.key, name:S.name, changes}); }
+    catch(e){ if (e.code!=="unavailable") throw e; await new Promise(r=>setTimeout(r,800+Math.random()*800)); await api(null,{key:S.key, name:S.name, changes}); }
     return true;
   };
   const p = S.writing.then(send).catch(e=>{
-      S.dec={...S.dec,[id]:prev}; rebuildLinks(); renderAll();
+      const back={...S.dec}; for (const id of ids) back[id]=prev[id]; S.dec=back; rebuildLinks(); renderAll();
       toast(e.code==="bad_passcode" ? "The team passcode changed. Click Change next to your name and re-enter it." : "That decision didn't save. Try again.");
       return false; })
-    .finally(()=>{ if (--S.pending[id]<=0) delete S.pending[id]; });
+    .finally(()=>{ for (const id of ids) if (--S.pending[id]<=0) delete S.pending[id]; });
   S.writing=p.then(()=>{},()=>{});
-  if (!quiet) toast(describe(id, body), undoable);
+  if (!quiet) toast(describe(ids, body), undoable);
+  if (S.cur && !isOpen(S.cur)) pickNext(); else renderAll();
   return p;
 }
-function describe(id, d){
-  const n=S.byId[id].source_name;
-  if (d.s==="match") return `Linked “${n}” to ${targetLabel(d.c).name}`;
-  if (d.s==="research") return `Sent “${n}” to the research list`;
-  if (d.s==="nohs") return `Marked “${n}” as not a high school`;
-  return `Returned “${n}” to the queue`;
+function describe(ids, d){
+  const n=`“${S.byId[ids[0]].source_name}”` + (ids.length>1?` and ${ids.length-1} other spelling${ids.length>2?"s":""}`:"");
+  if (d.s==="match") return `Linked ${n} to ${targetLabel(d.c).name}`;
+  if (d.s==="research") return `Sent ${n} to the research list`;
+  if (d.s==="nohs") return `Marked ${n} as not a high school`;
+  return `Returned ${n} to the queue`;
 }
 function undo(){
-  if (!S.last) return; const {id,prev}=S.last; S.last=null;
-  decide(id, {s:prev.s, ...(prev.c?{c:prev.c}:{})}, {undoable:false, quiet:true}).then(ok=>{ if(ok){ toast(`Undid the decision on “${S.byId[id].source_name}”`); S.cur=id; renderAll(); }});
-  S.cur=id; renderAll();
+  if (!S.last) return; const {ids,prev}=S.last; S.last=null;
+  Promise.all(ids.map(id=>decideIds([id], {s:prev[id].s, ...(prev[id].c?{c:prev[id].c}:{})}, {undoable:false, quiet:true})))
+    .then(ok=>{ if (ok.every(Boolean)) { toast(`Undid the decision on “${S.byId[ids[0]].source_name}”`); S.cur=ids[0]; renderAll(); }});
+  S.cur=ids[0]; renderAll();
 }
 let toastTimer;
 function toast(msg, withUndo){
@@ -337,8 +347,16 @@ function toast(msg, withUndo){
 /* ---------- queue ---------- */
 function queue(){
   const q=norm(S.q); const raw=S.q.trim().toLowerCase();
-  return S.aliases.filter(a=>isOpen(a.alias_id) && (S.src==="all"||a.source===S.src) && (!S.st||a.state===S.st)
-    && (!raw || a.source_name.toLowerCase().includes(raw) || (q && norm(a.source_name).includes(q))));
+  const hit=a=>(S.src==="all"||a.source===S.src) && (!S.st||a.state===S.st)
+    && (!raw || a.source_name.toLowerCase().includes(raw) || (q && norm(a.source_name).includes(q)));
+  const out=[]; const seen=new Set();
+  for (const a of S.aliases) {                     // aliases arrive sorted by group size, group by group
+    if (seen.has(a.group)) continue;
+    const open=S.members[a.group].filter(isOpen);
+    if (!open.length || !open.some(id=>hit(S.byId[id]))) continue;
+    seen.add(a.group); out.push(S.byId[open[0]]);
+  }
+  return out;
 }
 function pickNext(reset){
   const list=queue().filter(a=>!S.skipped.has(a.alias_id));
@@ -347,10 +365,10 @@ function pickNext(reset){
 }
 function renderQueue(){
   const list=queue(); const ul=$("qlist"); ul.replaceChildren();
-  $("qcount").textContent = `${list.length.toLocaleString()} name${list.length===1?"":"s"} waiting${S.skipped.size?` · ${S.skipped.size} skipped this visit`:""}`;
+  $("qcount").textContent = `${list.length.toLocaleString()} school${list.length===1?"":"s"} to decide${S.skipped.size?` · ${S.skipped.size} skipped this visit`:""}`;
   for (const a of list.slice(0,S.shown)) {
     ul.append(el("li",{"aria-current":String(a.alias_id===S.cur), title:a.source_name, onclick:()=>{S.cur=a.alias_id; S.searchQ=""; S.searchSt=""; renderAll();}},
-      srcTag(a.source), el("span",{class:"nm"},a.source_name, S.skipped.has(a.alias_id)?el("span",{class:"muted"}," · skipped"):null), el("span",{class:"n",title:"Athletes listing this school"},a.n_athletes)));
+      el("span",{class:"tags"},...[...new Set(openMembers(a.alias_id).map(x=>S.byId[x].source))].map(srcTag)), el("span",{class:"nm"},a.source_name, S.skipped.has(a.alias_id)?el("span",{class:"muted"}," · skipped"):null), el("span",{class:"n",title:"Athletes listing this school"},S.groupN[a.group])));
   }
   if (list.length>S.shown) ul.append(el("li",{class:"qmore",onclick:()=>{S.shown+=300;renderQueue();}},el("span"),el("span",{class:"muted"},`Show ${Math.min(300,list.length-S.shown)} more`),el("span")));
 }
@@ -368,7 +386,7 @@ async function renderWork(){
     a.city?el("span",{},"City ",el("b",{},a.city)):null,
     a.zip?el("span",{class:"mono"},"ZIP ",el("b",{},a.zip)):null,
     a.address?el("span",{},el("b",{},a.address)):null,
-    el("span",{},el("b",{class:"mono"},a.n_athletes)," athletes"),
+    el("span",{},el("b",{class:"mono"},S.groupN[a.group])," athletes"),
     hometowns.length?el("span",{},"Athlete hometowns ",el("b",{},hometowns.join(" · "))):null,
     a.source_school_id?el("span",{class:"mono"},`${NAMES[a.source]||a.source} id ${a.source_school_id.split(";")[0]}`):null);
 
@@ -376,8 +394,10 @@ async function renderWork(){
   const rows=[]; const seen=new Set();
   for (const pid of a.peers||[]) { const d=S.dec[pid]; if (d && d.s==="match" && !seen.has(d.c)) { seen.add(d.c); rows.push({code:d.c, hint:S.byId[pid]}); } }
   for (const [code,score] of a.candidates||[]) if (!seen.has(code)) { seen.add(code); rows.push({code,score}); }
-  const shown=rows.slice(0,9);
-  const peersOpen=(a.peers||[]).map(p=>S.byId[p]).filter(p=>p && isOpen(p.alias_id));
+  let shown=rows.slice(0,9);
+  const twins=openMembers(id).filter(x=>x!==id).map(x=>S.byId[x]);
+  const peersOpen=(a.peers||[]).map(p=>S.byId[p]).filter(p=>p && isOpen(p.alias_id) && p.group!==a.group);
+  if (a.exact && !shown.some(r=>r.code===a.exact)) shown=[{code:a.exact},...shown].slice(0,9);
 
   const cands=el("div",{class:"cands"});
   shown.forEach((r,i)=>cands.append(candRow(r,i+1,id)));
@@ -407,6 +427,9 @@ async function renderWork(){
   const can=S.canWrite!==false && !!S.db;
   w.replaceChildren(
     el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?")), el("h2",{},a.source_name), facts),
+    twins.length?el("div",{class:"twins"},el("span",{class:"label"},"Same school, other spellings · decided together"),
+      ...twins.map(t=>el("div",{class:"twin"},srcTag(t.source),el("b",{},t.source_name),
+        el("span",{class:"muted"},[t.city,t.state].filter(Boolean).join(", ")+(t.n_athletes?` · ${t.n_athletes} athletes`:""))))):null,
     peersOpen.length?el("div",{class:"chips"},el("span",{class:"label",style:"align-self:center"},"Similar names still waiting"),...peersOpen.map(p=>el("button",{class:"chip",onclick:()=>{S.cur=p.alias_id;renderAll();}},srcTag(p.source),p.source_name))):null,
     el("div",{class:"label"},"Closest CEEB schools"),
     cands,
@@ -428,7 +451,7 @@ function candRow(r, key, id){
   return el("div",{class:"cand"},
     el("span",{class:"key"},key||""),
     el("div",{style:"min-width:0"},
-      el("div",{class:"title"},t.name),
+      el("div",{class:"title"},t.name, id && S.byId[id]?.exact===r.code ? el("span",{class:"exact"},"Exact name match") : null),
       el("div",{class:"meta"},
         el("span",{class:"mono"},"CEEB "+r.code),
         t.city?el("span",{},t.city):null, info&&info.zip?el("span",{class:"mono"},info.zip):null,
