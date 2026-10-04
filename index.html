@@ -287,8 +287,8 @@ function showJoin(err){
   const pw=el("input",{id:"joinKey",type:"password",placeholder:"Team passcode",value:"","aria-label":"Team passcode"});
   const go=el("button",{class:"primary",type:"submit"},"Start matching");
   const form=el("form",{class:"row"},nm,pw,go);
-  form.addEventListener("submit",e=>{ e.preventDefault(); if(!nm.value.trim()||!pw.value) return;
-    S.name=nm.value.trim(); S.key=pw.value; store.set("hsr_name",S.name); store.set("hsr_key",S.key);
+  form.addEventListener("submit",e=>{ e.preventDefault(); if(!nm.value.trim()||!pw.value.trim()) return;
+    S.name=nm.value.trim(); S.key=pw.value.trim(); store.set("hsr_name",S.name); store.set("hsr_key",S.key);
     b.replaceChildren(el("span",{},"Connecting…")); connect(); });
   b.replaceChildren(el("div",{},err?el("p",{style:"margin:0 0 6px"},err):el("p",{style:"margin:0 0 6px"},"Enter your name and the team passcode to save decisions. Your name is recorded with each match.")), form);
   S.canWrite=false; renderAll();
