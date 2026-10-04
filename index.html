@@ -242,7 +242,7 @@ async function init(){
     for (const sel of [$("stateSel"),$("lstate")]) for (const s of states) sel.append(el("option",{value:s},s));
     const seg=$("srcseg");
     for (const s of ["all",...d.sources]) seg.append(el("button",{"aria-pressed":String(s===S.src),"data-src":s,onclick:()=>{S.src=s;S.shown=150;[...seg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.src===s)));renderQueue();pickNext(true);}},s==="all"?"All":(NAMES[s]||s)));
-    $("sub").textContent = `Link each way a recruiting service writes a school to one CEEB code. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
+    $("sub").textContent = `The schools that need a person: no exact match in the CEEB list. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
   } catch(e) { $("work").replaceChildren(el("div",{class:"empty"},el("h2",{},"The school list didn't load"),el("p",{},"Reload the page. If it keeps failing, the data files may be missing from the site."))); return; }
   renderAll(); pickNext(true);
   connect();
@@ -345,13 +345,15 @@ function toast(msg, withUndo){
 }
 
 /* ---------- queue ---------- */
+const SCOPE = "uncertain";   // "uncertain" = skip groups with an exact CEEB name match; "all" = everything
+const inScope = a => SCOPE==="all" || !a.exact;
 function queue(){
   const q=norm(S.q); const raw=S.q.trim().toLowerCase();
   const hit=a=>(S.src==="all"||a.source===S.src) && (!S.st||a.state===S.st)
     && (!raw || a.source_name.toLowerCase().includes(raw) || (q && norm(a.source_name).includes(q)));
   const out=[]; const seen=new Set();
   for (const a of S.aliases) {                     // aliases arrive sorted by group size, group by group
-    if (seen.has(a.group)) continue;
+    if (seen.has(a.group) || !inScope(a)) continue;
     const open=S.members[a.group].filter(isOpen);
     if (!open.length || !open.some(id=>hit(S.byId[id]))) continue;
     seen.add(a.group); out.push(S.byId[open[0]]);
@@ -516,18 +518,21 @@ $("dlCsv").onclick=async()=>{ const rows=await exportRows(); const cols=["alias_
 
 /* ---------- shell ---------- */
 function renderStats(){
-  const total=S.aliases.length; let m=0,p=0,x=0;
-  for (const a of S.aliases){ const d=S.dec[a.alias_id]; if(!d) continue; if(d.s==="match")m++; else if(d.s==="research")p++; else if(d.s==="nohs")x++; }
-  const open=total-m-p-x; const pct=v=>total?(100*v/total)+"%":"0";
-  const bySrc={}; for (const a of S.aliases){ (bySrc[a.source] ||= [0,0])[0]++; if(!isOpen(a.alias_id)) bySrc[a.source][1]++; }
+  let total=0,open=0,m=0,p=0,x=0;
+  for (const [g,ids] of Object.entries(S.members)) {
+    if (!inScope(S.byId[ids[0]])) continue; total++;
+    const o=ids.filter(isOpen);
+    if (o.length) { open++; continue; }
+    const d=S.dec[ids[0]].s; if (d==="match") m++; else if (d==="research") p++; else x++;
+  }
+  const pct=v=>total?(100*v/total)+"%":"0";
   $("stats").replaceChildren(
-    el("span",{class:"stat"},el("b",{},open.toLocaleString())," waiting"),
+    el("span",{class:"stat"},el("b",{},open.toLocaleString())," of ",el("b",{},total.toLocaleString())," schools left"),
     el("span",{class:"stat"},el("b",{},m.toLocaleString())," linked"),
     el("span",{class:"stat"},el("b",{},p.toLocaleString())," need research"),
     el("span",{class:"stat"},el("b",{},x.toLocaleString())," not a high school"),
-    el("div",{class:"bar",role:"img","aria-label":`${total-open} of ${total} names decided`},
-      el("span",{style:`width:${pct(m)};background:var(--accent)`}), el("span",{style:`width:${pct(p)};background:var(--flag)`}), el("span",{style:`width:${pct(x)};background:var(--muted)`})),
-    ...Object.entries(bySrc).map(([s,[n,d]])=>el("span",{class:"stat muted"},`${NAMES[s]||s} `,el("b",{},Math.round(100*d/n)+"%"))));
+    el("div",{class:"bar",role:"img","aria-label":`${total-open} of ${total} schools decided`},
+      el("span",{style:`width:${pct(m)};background:var(--accent)`}), el("span",{style:`width:${pct(p)};background:var(--flag)`}), el("span",{style:`width:${pct(x)};background:var(--muted)`})));
 }
 function renderAll(){ renderStats(); if (S.tab==="queue"){ renderQueue(); renderWork(); } else if (S.tab==="linked") renderLinked(); }
 
