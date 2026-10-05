@@ -199,7 +199,7 @@ function norm(s){
 }
 
 const S = {
-  aliases:[], byId:{}, dec:{}, links:{}, ceeb:{}, ceebWait:{},
+  aliases:[], byId:{}, dec:{}, links:{}, ceeb:{}, ceebWait:{}, canon:{},
   db:null, user:null, uid:null, canWrite:null, live:false,
   src:"all", st:"", q:"", cur:null, skipped:new Set(), shown:150, last:null, tab:"queue",
   lst:"", lkind:"match", lq:"", builtAt:"", searchQ:"", searchSt:"", writing:Promise.resolve()
@@ -215,7 +215,7 @@ async function loadCeeb(st){
   if (!st) return null;
   if (S.ceeb[st]) return S.ceeb[st];
   if (!S.ceebWait[st]) S.ceebWait[st] = fetch("data/ceeb/"+encodeURIComponent(st)+".json").then(r=>r.ok?r.json():[]).catch(()=>[]).then(rows=>{
-    const m = {}; for (const [c,name,city,zip,detail,addr] of rows) m[c]={c,name,city,zip,detail,addr,st,n:norm(name)};
+    const m = {}; for (const [c,name,city,zip,detail,addr,alts] of rows) m[c]={c,name,city,zip,detail,addr,alts:alts||[],st,n:norm(name)};
     S.ceeb[st]=m; return m; });
   return S.ceebWait[st];
 }
@@ -234,6 +234,8 @@ function targetLabel(code){
 async function init(){
   try {
     const r = await fetch("data/aliases.json"); const d = await r.json();
+    // Duplicate College Board codes for one school map to its main code.
+    try { S.canon = await (await fetch("data/ceeb_alias.json")).json(); } catch(e) { S.canon = {}; }
     S.builtAt = d.built_at; const cols=d.columns;
     S.aliases = d.aliases.map(row=>{ const o={}; cols.forEach((c,i)=>o[c]=row[i]); return o; });
     S.members={}; S.groupN={};
@@ -277,7 +279,7 @@ async function sync(full){
   // Re-read a 30-second overlap so a save that lands mid-read is never missed.
   const d = await api({key:S.key, since: full ? 0 : Math.max(0, S.since - 30000)});
   const dec = full ? {} : {...S.dec};
-  for (const r of d.rows) if (!S.pending[r.id]) dec[r.id] = {s:r.s, c:r.c||undefined, u:r.u, t:r.t};
+  for (const r of d.rows) if (!S.pending[r.id]) dec[r.id] = {s:r.s, c:(S.canon[r.c]||r.c)||undefined, u:r.u, t:r.t};
   S.since = d.now; S.dec = dec; S.live = true; rebuildLinks();
   if (S.cur && !isOpen(S.cur)) pickNext(); else renderAll();
 }
@@ -415,7 +417,7 @@ async function renderWork(){
     const m=await loadCeeb(sSt.value); const nq=norm(q); const toks=nq.split(" ").filter(Boolean); const lq=q.toLowerCase();
     const scored=[];
     for (const c of Object.values(m||{})) {
-      let sc=0; if (c.c===q) sc=200; else {
+      let sc=0; if (c.c===q || c.alts.includes(q)) sc=200; else {
         if (c.name.toLowerCase().includes(lq)) sc+=60; if ((c.city||"").toLowerCase().includes(lq)) sc+=30;
         for (const t of toks) if (c.n.split(" ").includes(t)) sc+=25; else if (c.n.includes(t)) sc+=10; }
       if (sc>0) scored.push([sc,c.c]);
@@ -457,7 +459,8 @@ function candRow(r, key, id){
       el("div",{class:"meta"},
         el("span",{class:"mono"},"CEEB "+r.code),
         t.city?el("span",{},t.city):null, info&&info.zip?el("span",{class:"mono"},info.zip):null,
-        info&&info.addr?el("span",{},info.addr):null, info&&info.detail?el("span",{},info.detail):null),
+        info&&info.addr?el("span",{},info.addr):null, info&&info.detail?el("span",{},info.detail):null,
+        info&&info.alts.length?el("span",{class:"mono",title:"The College Board lists this school under more than one code. Either one is the same school."},"also listed as CEEB "+info.alts.join(", ")):null),
       r.hint?el("div",{class:"chips"},el("span",{class:"chip hint"},srcTag(r.hint.source),`${NAMES[r.hint.source]||r.hint.source}'s “${r.hint.source_name}” is linked here`)):null,
       linked.length?el("div",{class:"chips"},...linked.slice(0,6).map(x=>el("span",{class:"chip"},srcTag(x.source),x.source_name)), linked.length>6?el("span",{class:"chip"},`+${linked.length-6} more`):null):null),
     el("div",{class:"right"},
