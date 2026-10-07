@@ -220,6 +220,9 @@ async function loadCeeb(st){
   return S.ceebWait[st];
 }
 function ceebInfo(code){ for (const m of Object.values(S.ceeb)) if (m[code]) return m[code]; return null; }
+// State filter: "" = all states, NO_STATE = names with no state (international and "(Other)" entries).
+const NO_STATE="__none";
+function inState(a, st){ return !st || (st===NO_STATE ? !a.state : a.state===st); }
 function isOpen(id){ const d=S.dec[id]; return !d || d.s==="open"; }
 // Names that are the same school written two ways (build_queue.groups) are decided together.
 function openMembers(id){ const a=S.byId[id]; return a ? S.members[a.group].filter(isOpen) : []; }
@@ -241,7 +244,11 @@ async function init(){
     S.members={}; S.groupN={};
     for (const a of S.aliases) { a.group ||= a.alias_id; S.byId[a.alias_id]=a; (S.members[a.group] ||= []).push(a.alias_id); S.groupN[a.group]=(S.groupN[a.group]||0)+(+a.n_athletes||0); }
     const states=[...new Set(S.aliases.map(a=>a.state).filter(Boolean))].sort();
-    for (const sel of [$("stateSel"),$("lstate")]) for (const s of states) sel.append(el("option",{value:s},s));
+    const noState=S.aliases.filter(a=>!a.state).length;
+    for (const sel of [$("stateSel"),$("lstate")]) {
+      if (noState) sel.append(el("option",{value:NO_STATE},`No state (${noState} international / other)`));
+      for (const s of states) sel.append(el("option",{value:s},s));
+    }
     const seg=$("srcseg");
     for (const s of ["all",...d.sources]) seg.append(el("button",{"aria-pressed":String(s===S.src),"data-src":s,onclick:()=>{S.src=s;S.shown=150;[...seg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.src===s)));renderQueue();pickNext(true);}},s==="all"?"All":(NAMES[s]||s)));
     $("sub").textContent = `The schools that need a person: no exact match in the CEEB list. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
@@ -351,7 +358,7 @@ const SCOPE = "uncertain";   // "uncertain" = skip groups with an exact CEEB nam
 const inScope = a => SCOPE==="all" || !a.exact;
 function queue(){
   const q=norm(S.q); const raw=S.q.trim().toLowerCase();
-  const hit=a=>(S.src==="all"||a.source===S.src) && (!S.st||a.state===S.st)
+  const hit=a=>(S.src==="all"||a.source===S.src) && inState(a,S.st)
     && (!raw || a.source_name.toLowerCase().includes(raw) || (q && norm(a.source_name).includes(q)));
   const out=[]; const seen=new Set();
   for (const a of S.aliases) {                     // aliases arrive sorted by group size, group by group
@@ -474,11 +481,11 @@ async function renderLinked(){
   if (!S.live && S.db) { box.replaceChildren(el("div",{class:"empty"},"Loading the team's decisions…")); return; }
   const groups=[];
   if (kind!=="match") {
-    const ids=Object.entries(S.dec).filter(([id,d])=>d.s===kind && S.byId[id] && (!st||S.byId[id].state===st)).map(([id])=>id);
+    const ids=Object.entries(S.dec).filter(([id,d])=>d.s===kind && S.byId[id] && inState(S.byId[id],st)).map(([id])=>id);
     if (ids.length) groups.push({code:null, ids});
   } else {
     for (const [code,ids] of Object.entries(S.links)) {
-      if (st && !ids.some(i=>S.byId[i]?.state===st)) continue;
+      if (st && !ids.some(i=>S.byId[i] && inState(S.byId[i],st))) continue;
       groups.push({code, ids});
     }
   }
