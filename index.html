@@ -251,7 +251,7 @@ async function init(){
     }
     const seg=$("srcseg");
     for (const s of ["all",...d.sources]) seg.append(el("button",{"aria-pressed":String(s===S.src),"data-src":s,onclick:()=>{S.src=s;S.shown=150;[...seg.children].forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.src===s)));renderQueue();pickNext(true);}},s==="all"?"All":(NAMES[s]||s)));
-    $("sub").textContent = `The schools that need a person: no exact match in the CEEB list. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
+    $("sub").textContent = `Schools that need a person, plus a spot check of the automatic matches. Names last refreshed ${new Date(S.builtAt).toLocaleDateString()}.`;
   } catch(e) { $("work").replaceChildren(el("div",{class:"empty"},el("h2",{},"The school list didn't load"),el("p",{},"Reload the page. If it keeps failing, the data files may be missing from the site."))); return; }
   renderAll(); pickNext(true);
   connect();
@@ -355,7 +355,8 @@ function toast(msg, withUndo){
 
 /* ---------- queue ---------- */
 const SCOPE = "uncertain";   // "uncertain" = skip groups with an exact CEEB name match; "all" = everything
-const inScope = a => SCOPE==="all" || !a.exact;
+// Exact matches stay out, except the spot-check ones (a.review), which the team decides blind.
+const inScope = a => SCOPE==="all" || !a.exact || !!a.review;
 function queue(){
   const q=norm(S.q); const raw=S.q.trim().toLowerCase();
   const hit=a=>(S.src==="all"||a.source===S.src) && inState(a,S.st)
@@ -408,7 +409,7 @@ async function renderWork(){
   let shown=rows.slice(0,9);
   const twins=openMembers(id).filter(x=>x!==id).map(x=>S.byId[x]);
   const peersOpen=(a.peers||[]).map(p=>S.byId[p]).filter(p=>p && isOpen(p.alias_id) && p.group!==a.group);
-  if (a.exact && !shown.some(r=>r.code===a.exact)) shown=[{code:a.exact},...shown].slice(0,9);
+  if (a.exact && !a.review && !shown.some(r=>r.code===a.exact)) shown=[{code:a.exact},...shown].slice(0,9);
 
   const cands=el("div",{class:"cands"});
   shown.forEach((r,i)=>cands.append(candRow(r,i+1,id)));
@@ -437,7 +438,8 @@ async function renderWork(){
 
   const can=S.canWrite!==false && !!S.db;
   w.replaceChildren(
-    el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?")), el("h2",{},a.source_name), facts),
+    el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?"),
+      a.review?el("span",{class:"exact",style:"background:var(--flag-soft);color:var(--flag)",title:"Part of the quality check on automatic matches. Decide it like any other school."},"Spot check"):null), el("h2",{},a.source_name), facts),
     twins.length?el("div",{class:"twins"},el("span",{class:"label"},"Same school, other spellings · decided together"),
       ...twins.map(t=>el("div",{class:"twin"},srcTag(t.source),el("b",{},t.source_name),
         el("span",{class:"muted"},[t.city,t.state].filter(Boolean).join(", ")+(t.n_athletes?` · ${t.n_athletes} athletes`:""))))):null,
@@ -462,7 +464,7 @@ function candRow(r, key, id){
   return el("div",{class:"cand"},
     el("span",{class:"key"},key||""),
     el("div",{style:"min-width:0"},
-      el("div",{class:"title"},t.name, id && S.byId[id]?.exact===r.code ? el("span",{class:"exact"},"Exact name match") : null),
+      el("div",{class:"title"},t.name, id && S.byId[id]?.exact===r.code && !S.byId[id].review ? el("span",{class:"exact"},"Exact name match") : null),
       el("div",{class:"meta"},
         el("span",{class:"mono"},"CEEB "+r.code),
         t.city?el("span",{},t.city):null, info&&info.zip?el("span",{class:"mono"},info.zip):null,
