@@ -354,8 +354,8 @@ function toast(msg, withUndo){
 }
 
 /* ---------- queue ---------- */
-const SCOPE = "uncertain";   // "uncertain" = skip groups with an exact CEEB name match; "all" = everything
-const inScope = a => SCOPE==="all" || !a.exact;
+const SCOPE = "uncertain";   // "uncertain" = skip groups with an exact CEEB name match unless they were spot-checked; "all" = everything
+const inScope = a => SCOPE==="all" || !a.exact || !!a.review;
 function queue(){
   const q=norm(S.q); const raw=S.q.trim().toLowerCase();
   const hit=a=>(S.src==="all"||a.source===S.src) && inState(a,S.st)
