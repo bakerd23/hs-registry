@@ -14,6 +14,8 @@
 const HEADERS = ['alias_id', 'status', 'ceeb_code', 'decided_by', 'decided_at', 'server_ms'];
 const LOG_HEADERS = ['server_time', 'alias_id', 'status', 'ceeb_code', 'decided_by', 'decided_at'];
 const STATUSES = ['match', 'research', 'nohs', 'open'];
+// A College Board code (6 digits) or one of our own for schools without one: VT-<state>-0001 (Data/Reference/vt_school_codes.csv).
+const CODE_RE = /^(\d{6}|VT-[A-Z]{2}-\d{4})$/;
 
 function sheet_(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -62,7 +64,7 @@ function doPost(e) {
   if (!authorized_(body.key)) return json_({ ok: false, error: 'bad_passcode' });
   const name = String(body.name || '').slice(0, 60);
   const changes = (body.changes || []).filter(c =>
-    /^[0-9a-f]{12}$/.test(c.id) && STATUSES.indexOf(c.s) >= 0 && (c.s !== 'match' || /^\d{6}$/.test(c.c)));
+    /^[0-9a-f]{12}$/.test(c.id) && STATUSES.indexOf(c.s) >= 0 && (c.s !== 'match' || CODE_RE.test(c.c)));
   if (!changes.length) return json_({ ok: false, error: 'no_valid_changes' });
 
   const lock = LockService.getScriptLock();
