@@ -250,6 +250,38 @@ function openMembers(id){ const a=S.byId[id]; return a ? S.members[a.group].filt
 function rebuildLinks(){
   const L={}; for (const [id,d] of Object.entries(S.dec)) if (d && d.s==="match" && d.c) (L[d.c] ||= []).push(id);
   S.links=L;
+  // Schools the team saved as new (no College Board code). Names that share level, state, name and city are one
+  // school, and assign_school_ids.py gives them one ID.
+  const C={};
+  for (const [id,d] of Object.entries(S.dec)) if (d && d.s==="new" && d.nm) {
+    const k=createdKey(d); (C[k] ||= {key:k, nm:d.nm, cy:d.cy||"", l:d.l||"", st:d.st||"XX", n:norm(d.nm), ids:[]}).ids.push(id);
+  }
+  S.created=C;
+}
+const createdKey = d => [d.l||"", d.st||"XX", norm(d.nm), norm(d.cy||"")].join("|");
+// Linking to a school someone created copies its exact name, city, level and state, so both get the same ID.
+function linkCreated(id, c){ return decide(id, {s:"new", l:c.l, st:c.st, nm:c.nm, cy:c.cy, n:(S.form.n||"").trim()}); }
+function createdMatches(a, q){
+  const toks=norm(q).split(" ").filter(Boolean); const city=norm(a.city||"");
+  const out=[];
+  for (const c of Object.values(S.created||{})) {
+    let sc=0; for (const t of toks) if (c.n.split(" ").includes(t)) sc+=2; else if (c.n.includes(t)) sc+=1;
+    if (city && norm(c.cy)===city) sc+=2;
+    if (c.st===(a.state||"XX")) sc+=1;
+    if (sc>=3) out.push([sc,c]);
+  }
+  return out.sort((x,y)=>y[0]-x[0]).map(([,c])=>c);
+}
+function createdRow(c, id){
+  const can=S.canWrite!==false && !!S.db;
+  const linked=c.ids.map(x=>S.byId[x]).filter(Boolean);
+  return el("div",{class:"cand"},
+    el("span",{class:"key"},""),
+    el("div",{style:"min-width:0"},
+      el("div",{class:"title"},c.nm, el("span",{class:"chip guess"},"Created by the team")),
+      el("div",{class:"meta"}, el("span",{class:"mono"},`${c.l}-${c.st} · new ID`), c.cy?el("span",{},c.cy):null),
+      linked.length?el("div",{class:"chips"},...linked.slice(0,6).map(x=>el("span",{class:"chip"},srcTag(x.source),x.source_name)), linked.length>6?el("span",{class:"chip"},`+${linked.length-6} more`):null):null),
+    el("div",{class:"right"}, el("button",{class:"primary",disabled:!can,onclick:()=>linkCreated(id,c)},"Same school")));
 }
 function targetLabel(code, fallback){
   const i=ceebInfo(code); return i?{name:i.name, city:i.city, zip:i.zip}:fallback||{name:"CEEB "+code, city:""};
@@ -346,6 +378,10 @@ function decideCard(id, rec){
     if (!/^[A-Z]{2}$/.test(f.st)) { toast("The state code must be 2 letters (XX if none)."); $("stcode")?.focus(); return; }
     if (rec.s==="new" && !f.nm.trim()) { toast("Give the new school a name."); $("newName")?.focus(); return; }
     if (rec.s==="match" && COLLEGE.has(f.l) !== /^\d{4}$/.test(rec.c)) { toast(COLLEGE.has(f.l) ? "A college links to a 4-digit college code. Search the college list, or change the level." : "That's a college code. Change the level to JUCO, NAIA or NCAA, or pick a high school."); return; }
+  }
+  if (rec.s==="new") {
+    const same=Object.values(S.created||{}).find(c=>c.st===f.st && c.n===norm(f.nm) && norm(c.cy)===norm(f.cy));
+    if (same) { const p=linkCreated(id, same); toast(`Linked to “${same.nm}”, which the team already created${same.l!==f.l?` as ${same.l} (one school, one level)`:""}.`, true); return p; }
   }
   const extra = rec.s==="open" ? {} : {l:f.l, st:f.st, n:f.n.trim()};
   return decide(id, {...rec, ...extra, ...(rec.s==="new"?{nm:f.nm.trim(), cy:f.cy.trim()}:{})});
@@ -479,7 +515,9 @@ async function renderWork(){
       if (sc>0) scored.push([sc,c.c]);
     }
     scored.sort((x,y)=>y[0]-x[0]);
-    results.replaceChildren(...(scored.length?scored.slice(0,15).map(([,c])=>candRow({code:c},null,id)):[el("div",{class:"cand"},el("span"),el("span",{class:"muted"},`No ${sSt.value} ${college?"colleges":"schools"} match “${q}”.`),el("span"))]));
+    const made=Object.values(S.created||{}).filter(c=>(!sSt.value || c.st===sSt.value || c.st==="XX")
+      && (c.nm.toLowerCase().includes(lq) || c.cy.toLowerCase().includes(lq) || (toks.length && toks.every(t=>c.n.includes(t))))).slice(0,5);
+    results.replaceChildren(...(scored.length||made.length?[...made.map(c=>createdRow(c,id)), ...scored.slice(0,15).map(([,c])=>candRow({code:c},null,id))]:[el("div",{class:"cand"},el("span"),el("span",{class:"muted"},`No ${sSt.value} ${college?"colleges":"schools"} match “${q}”.`),el("span"))]));
     results.hidden=false;
   };
   sQ.addEventListener("input",runSearch); sSt.addEventListener("change",runSearch);
@@ -499,6 +537,8 @@ async function renderWork(){
   nmIn.addEventListener("input",()=>{ f.nm=nmIn.value; });
   const cyIn=el("input",{id:"newCity",value:f.cy,"aria-label":"New school city",placeholder:"City",style:"flex:1 1 120px"});
   cyIn.addEventListener("input",()=>{ f.cy=cyIn.value; });
+  const made=createdMatches(a, a.source_name).slice(0,5);
+  const madeBox=made.length?el("div",{class:"cands"},...made.map(c=>createdRow(c,id))):null;
   const newForm=el("div",{class:"newform"},
     el("span",{class:"label"},"No College Board code? Save it as a new school"),
     el("div",{class:"row"},nmIn,cyIn,el("button",{disabled:!can,onclick:()=>decideCard(id,{s:"new"}),title:"It gets our own ID (level + state + 6 digits) when the decisions are exported"},"Save as new school ",el("kbd",{},"N"))));
@@ -514,6 +554,8 @@ async function renderWork(){
     college?(Object.keys(guesses).length?el("div",{class:"muted",style:"font-size:13px"},"Claude's guesses were high schools: "+Object.values(guesses).map(g=>g.fb.name+", "+g.fb.city).join(" · ")):null):cands,
     college?el("div",{class:"label"},"College Board colleges (4-digit codes)"):null,
     el("div",{class:"searchbox"}, el("div",{class:"row"},sSt,sQ), results),
+    madeBox?el("div",{class:"label"},"Schools the team already created that look similar"):null,
+    madeBox,
     newForm,
     el("div",{class:"actions"},
       el("button",{onclick:()=>decideCard(id,{s:"research"}),disabled:!can,title:"Can't tell yet. It goes to the research list."},"Needs research ",el("kbd",{},"R")),
@@ -549,9 +591,12 @@ function candRow(r, key, id){
 /* ---------- linked view ---------- */
 async function renderLinked(){
   const box=$("linked"); const kind=S.lkind; const st=S.lst; const q=S.lq.trim().toLowerCase();
+  const run=S.lrun=(S.lrun||0)+1;      // a slower earlier render must not overwrite a newer one
   if (!S.live && S.db) { box.replaceChildren(el("div",{class:"empty"},"Loading the team's decisions…")); return; }
   const groups=[];
-  if (kind!=="match") {
+  if (kind==="new") {
+    for (const c of Object.values(S.created||{})) if (!st || c.ids.some(i=>S.byId[i] && inState(S.byId[i],st))) groups.push({code:null, made:c, ids:c.ids.filter(i=>S.byId[i])});
+  } else if (kind!=="match") {
     const ids=Object.entries(S.dec).filter(([id,d])=>d.s===kind && S.byId[id] && inState(S.byId[id],st)).map(([id])=>id);
     if (ids.length) groups.push({code:null, ids});
   } else {
@@ -563,18 +608,21 @@ async function renderLinked(){
   const statesNeeded=new Set(groups.flatMap(g=>g.ids.map(i=>S.byId[i]?.state||"INTL")));
   await Promise.all([...statesNeeded].map(loadCeeb));
   if (groups.some(g=>/^\d{4}$/.test(g.code||""))) await loadColleges();
-  let shownGroups=groups.filter(g=>!q || (g.code||"").toLowerCase().includes(q) || (g.code && targetLabel(g.code).name.toLowerCase().includes(q)) || g.ids.some(i=>S.byId[i].source_name.toLowerCase().includes(q)));
-  shownGroups.sort((x,y)=>(x.code?targetLabel(x.code).name:"").localeCompare(y.code?targetLabel(y.code).name:""));
+  if (run!==S.lrun) return;
+  let shownGroups=groups.filter(g=>!q || (g.made && g.made.nm.toLowerCase().includes(q)) || (g.code||"").toLowerCase().includes(q) || (g.code && targetLabel(g.code).name.toLowerCase().includes(q)) || g.ids.some(i=>S.byId[i].source_name.toLowerCase().includes(q)));
+  const gName=g=>g.made?g.made.nm:g.code?targetLabel(g.code).name:"";
+  shownGroups.sort((x,y)=>gName(x).localeCompare(gName(y)));
   const nAliases=shownGroups.reduce((s,g)=>s+g.ids.length,0);
-  $("lcount").textContent = kind==="nohs" ? `${nAliases.toLocaleString()} names marked not a high school` : kind==="new" ? `${nAliases.toLocaleString()} names saved as new schools` : kind==="research" ? `${nAliases.toLocaleString()} names to research` : `${shownGroups.length.toLocaleString()} schools · ${nAliases.toLocaleString()} names`;
+  $("lcount").textContent = kind==="nohs" ? `${nAliases.toLocaleString()} names marked not a high school` : kind==="new" ? `${shownGroups.length.toLocaleString()} new schools · ${nAliases.toLocaleString()} names` : kind==="research" ? `${nAliases.toLocaleString()} names to research` : `${shownGroups.length.toLocaleString()} schools · ${nAliases.toLocaleString()} names`;
   if (!shownGroups.length) { box.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing here yet"),el("p",{},kind==="match"?"Schools appear here once someone links a name in the queue.":kind==="new"?"Names appear here when someone saves a school that has no College Board code.":kind==="research"?"Names appear here when someone can't find them in the CEEB list.":"Names marked not a high school appear here."))); return; }
   box.replaceChildren(...shownGroups.slice(0,200).map(g=>{
     const t=g.code?targetLabel(g.code):null; const info=g.code?ceebInfo(g.code):null;
     const sch=el("div",{class:"school"});
+    if (g.made) sch.append(el("div",{class:"head"},el("h3",{},g.made.nm), el("span",{class:"mono muted"},`${g.made.l}-${g.made.st} · new ID`), g.made.cy?el("span",{class:"muted"},g.made.cy):null));
     if (t) sch.append(el("div",{class:"head"},el("h3",{},t.name), el("span",{class:"mono muted"},"CEEB "+g.code), t.city?el("span",{class:"muted"},t.city):null, info&&info.zip?el("span",{class:"mono muted"},info.zip):null));
     for (const i of g.ids) {
       const a=S.byId[i]; const d=S.dec[i]; const who=d.u||"Someone";
-      const extra=[d.s==="new"?`→ ${d.nm}${d.cy?", "+d.cy:""}`:"", d.l?`${d.l}-${d.st||"XX"}`:"", d.n?`“${d.n}”`:""].filter(Boolean).join(" · ");
+      const extra=[d.s==="new"&&!g.made?`→ ${d.nm}${d.cy?", "+d.cy:""}`:"", d.l&&!g.made?`${d.l}-${d.st||"XX"}`:"", d.n?`“${d.n}”`:""].filter(Boolean).join(" · ");
       sch.append(el("div",{class:"alias"},srcTag(a.source), el("span",{style:"min-width:0;overflow-wrap:anywhere"},a.source_name, extra?el("span",{}," "+extra):null, el("span",{class:"muted"},` · ${who}, ${new Date(d.t).toLocaleDateString()}`)),
         el("button",{disabled:S.canWrite===false||!S.db,onclick:()=>{decide(i,{s:"open"});renderAll();}},"Back to queue")));
     }
