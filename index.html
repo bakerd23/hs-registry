@@ -74,6 +74,13 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 .src{font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:3px 5px;border-radius:4px;background:var(--soft);color:var(--muted)}
 .src.va{background:var(--flag-soft);color:var(--flag)}
 .src.espn{background:var(--accent-soft);color:var(--accent)}
+.src.tf{background:var(--good-soft);color:var(--good)}
+.src.uc{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+.note{padding:8px 12px;border-radius:6px;background:var(--flag-soft);border-left:3px solid var(--flag);font-size:13px}
+.decide{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px}
+.decide .row > input{flex:0 1 auto}
+.chip.guess{border-color:var(--flag);background:var(--flag-soft)}
+.newform{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px dashed var(--line);border-radius:8px}
 .n{font-family:var(--mono);font-size:12px;color:var(--muted)}
 
 .work{padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -148,7 +155,7 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
       <ul class="qlist" id="qlist"></ul>
     </aside>
     <main class="panel work" id="work">
-      <div class="empty"><h2>Loading the queue</h2><p>School names from Verified and ESPN will appear here.</p></div>
+      <div class="empty"><h2>Loading the queue</h2><p>School names from Verified, ESPN, Tracking Football and UC Report will appear here.</p></div>
     </main>
   </section>
 
@@ -158,6 +165,7 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
         <select id="lstate" aria-label="State"><option value="">All states</option></select>
         <select id="lkind" aria-label="Kind">
           <option value="match">Linked to a school</option>
+          <option value="new">New schools (no CEEB code)</option>
           <option value="research">Needs research (not in CEEB list)</option>
           <option value="nohs">Marked not a high school</option>
         </select>
@@ -171,7 +179,7 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
   <section id="view-export" class="panel" hidden>
     <div class="prose">
       <h2>Export for BigQuery</h2>
-      <p>The download holds every decision the team has made, with the source name, the CEEB code, who decided, and when. It holds no player data. The same decisions live in the team's Google Sheet.</p>
+      <p>The download holds every decision the team has made, with the source name, the CEEB code (or the new school's name and city), the level and state for the school code, any notes, who decided, and when. It holds no player data. The same decisions live in the team's Google Sheet.</p>
       <div class="actions">
         <button class="primary" id="dlJson">Download decisions (JSON)</button>
         <button id="dlCsv">Download alias table (CSV)</button>
@@ -181,7 +189,8 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
       <pre>py hs_registry/export_bigquery.py hs_registry/exports/&lt;file&gt;.json</pre>
       <p>That writes <code>hs_master</code> (one row per active CEEB high school, with one column per source listing every name it uses and a blank <code>vt_name</code>) and <code>hs_alias</code> (one row per linked source name, used to relabel incoming data), plus BigQuery schema files. Names marked <b>needs research</b> go to a separate <code>hs_research.csv</code> and stay out of both tables until they're resolved.</p>
       <h3>Keyboard</h3>
-      <p><kbd>1</kbd>–<kbd>9</kbd> link to that school · <kbd>R</kbd> needs research (not in CEEB list) · <kbd>X</kbd> not a high school · <kbd>S</kbd> skip for now · <kbd>Z</kbd> undo your last decision · <kbd>/</kbd> search the CEEB list</p>
+      <p>For the new school codes (<code>&lt;LEVEL&gt;-&lt;ST&gt;-&lt;6-digit ID&gt;</code>), pick the level and check the state before saving. The 6-digit IDs are assigned afterward by <code>assign_school_ids.py</code>, so no two people can hand out the same number.</p>
+      <p><kbd>1</kbd>–<kbd>9</kbd> link to that school · <kbd>N</kbd> save as a new school (no CEEB code) · <kbd>R</kbd> needs research · <kbd>X</kbd> not a high school · <kbd>S</kbd> skip for now · <kbd>Z</kbd> undo your last decision · <kbd>/</kbd> search the CEEB list</p>
     </div>
   </section>
 </div>
@@ -189,7 +198,10 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 
 <script src="config.js"></script>
 <script>
-const NAMES = {va:"Verified", espn:"ESPN", "247":"247Sports", on3:"On3"};
+const NAMES = {va:"Verified", espn:"ESPN", tf:"Tracking Football", uc:"UC Report", "247":"247Sports", on3:"On3"};
+// School code levels (<LEVEL>-<ST>-<6-digit ID>). Colleges link to 4-digit College Board codes.
+const LEVELS = [["HS","High school (incl. homeschool)"],["JUCO","Junior / community college"],["NAIA","NAIA college"],["NCAA","NCAA college"],["NFL","NFL team"],["INTL","Outside the US and Canada"],["OTHR","Anything else: club team, middle school…"]];
+const COLLEGE = new Set(["JUCO","NAIA","NCAA"]);
 const DROP = new Set("high school hs h s sch schl senior sr the of and secondary jr junior shs hsch".split(" "));
 const EXPAND = {acad:"academy",academ:"academy",prep:"preparatory",st:"saint",ste:"sainte",mt:"mount",ft:"fort",cath:"catholic",cathol:"catholic",chr:"christian",chrstn:"christian",christ:"christian",cmty:"community",comm:"community",ctr:"center",cntr:"center",twp:"township",regl:"regional",reg:"regional",rgnl:"regional",co:"county",cnty:"county",intl:"international",hts:"heights",jt:"joint",n:"north",e:"east",w:"west",no:"north",so:"south",cent:"central",ctrl:"central",mem:"memorial",meml:"memorial",tech:"technical",voc:"vocational",magn:"magnet",inst:"institute",ind:"independent",isd:"independent",pk:"park",spgs:"springs",vly:"valley",lk:"lake",hls:"hills",bch:"beach"};
 function norm(s){
@@ -202,7 +214,8 @@ const S = {
   aliases:[], byId:{}, dec:{}, links:{}, ceeb:{}, ceebWait:{}, canon:{},
   db:null, user:null, uid:null, canWrite:null, live:false,
   src:"all", st:"", q:"", cur:null, skipped:new Set(), shown:150, last:null, tab:"queue",
-  lst:"", lkind:"match", lq:"", builtAt:"", searchQ:"", searchSt:"", writing:Promise.resolve()
+  lst:"", lkind:"match", lq:"", builtAt:"", searchQ:"", searchSt:"", writing:Promise.resolve(),
+  form:{}, formFor:null, col:null, colWait:null
 };
 const $ = id => document.getElementById(id);
 const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag);
@@ -219,7 +232,15 @@ async function loadCeeb(st){
     S.ceeb[st]=m; return m; });
   return S.ceebWait[st];
 }
-function ceebInfo(code){ for (const m of Object.values(S.ceeb)) if (m[code]) return m[code]; return null; }
+async function loadColleges(){
+  if (S.col) return S.col;
+  if (!S.colWait) S.colWait = fetch("data/colleges.json").then(r=>r.ok?r.json():[]).catch(()=>[]).then(rows=>{
+    const m={}; for (const [c,name,city,st,detail] of rows) m[c]={c,name,city,st,detail,alts:[],n:norm(name)};
+    S.col=m; return m; });
+  return S.colWait;
+}
+function ceebInfo(code){ if (/^\d{4}$/.test(code||"")) return S.col?.[code]||null;
+  for (const m of Object.values(S.ceeb)) if (m[code]) return m[code]; return null; }
 // State filter: "" = all states, NO_STATE = names with no state (international and "(Other)" entries).
 const NO_STATE="__none";
 function inState(a, st){ return !st || (st===NO_STATE ? !a.state : a.state===st); }
@@ -230,8 +251,14 @@ function rebuildLinks(){
   const L={}; for (const [id,d] of Object.entries(S.dec)) if (d && d.s==="match" && d.c) (L[d.c] ||= []).push(id);
   S.links=L;
 }
-function targetLabel(code){
-  const i=ceebInfo(code); return i?{name:i.name, city:i.city, zip:i.zip}:{name:"CEEB "+code, city:""};
+function targetLabel(code, fallback){
+  const i=ceebInfo(code); return i?{name:i.name, city:i.city, zip:i.zip}:fallback||{name:"CEEB "+code, city:""};
+}
+const isNew = a => a && (a.source==="tf" || a.source==="uc");
+// The level / state / notes the person has set on the current card; reset when the card changes.
+function formFor(a){
+  if (S.formFor!==a.alias_id) { S.formFor=a.alias_id; S.form={l:a.default_level||(isNew(a)?"":"HS"), st:a.state||"XX", n:"", nm:a.source_name, cy:a.city||""}; }
+  return S.form;
 }
 
 async function init(){
@@ -286,7 +313,7 @@ async function sync(full){
   // Re-read a 30-second overlap so a save that lands mid-read is never missed.
   const d = await api({key:S.key, since: full ? 0 : Math.max(0, S.since - 30000)});
   const dec = full ? {} : {...S.dec};
-  for (const r of d.rows) if (!S.pending[r.id]) dec[r.id] = {s:r.s, c:(S.canon[r.c]||r.c)||undefined, u:r.u, t:r.t};
+  for (const r of d.rows) if (!S.pending[r.id]) dec[r.id] = {s:r.s, c:(S.canon[r.c]||r.c)||undefined, u:r.u, t:r.t, l:r.l||"", st:r.st||"", nm:r.nm||"", cy:r.cy||"", n:r.n||""};
   S.since = d.now; S.dec = dec; S.live = true; rebuildLinks();
   if (S.cur && !isOpen(S.cur)) pickNext(); else renderAll();
 }
@@ -311,6 +338,18 @@ function banner(msg){ const b=$("banner"); b.textContent=msg; b.hidden=false; }
 
 /* ---------- writing decisions ---------- */
 function decide(id, rec, opts){ const ids=openMembers(id); return decideIds(ids.length?ids:[id], rec, opts); }
+// A decision from the card: adds the level, state and notes, and checks them first.
+function decideCard(id, rec){
+  const f=S.form;
+  if (rec.s==="match" || rec.s==="new") {
+    if (!f.l) { toast("Pick a level first (HS, JUCO, NAIA, NCAA, NFL, INTL or OTHR)."); return; }
+    if (!/^[A-Z]{2}$/.test(f.st)) { toast("The state code must be 2 letters (XX if none)."); $("stcode")?.focus(); return; }
+    if (rec.s==="new" && !f.nm.trim()) { toast("Give the new school a name."); $("newName")?.focus(); return; }
+    if (rec.s==="match" && COLLEGE.has(f.l) !== /^\d{4}$/.test(rec.c)) { toast(COLLEGE.has(f.l) ? "A college links to a 4-digit college code. Search the college list, or change the level." : "That's a college code. Change the level to JUCO, NAIA or NCAA, or pick a high school."); return; }
+  }
+  const extra = rec.s==="open" ? {} : {l:f.l, st:f.st, n:f.n.trim()};
+  return decide(id, {...rec, ...extra, ...(rec.s==="new"?{nm:f.nm.trim(), cy:f.cy.trim()}:{})});
+}
 function decideIds(ids, rec, {undoable=true, quiet=false}={}){
   if (!S.db || S.canWrite===false) { toast("Enter your name and the team passcode to save decisions."); return Promise.resolve(false); }
   const prev={}; for (const id of ids) prev[id]=S.dec[id]||{s:"open"};
@@ -318,7 +357,7 @@ function decideIds(ids, rec, {undoable=true, quiet=false}={}){
   const dec={...S.dec}; for (const id of ids) { dec[id]=body; S.pending[id]=(S.pending[id]||0)+1; }
   S.dec=dec; rebuildLinks();                              // optimistic; the next sync confirms it
   if (undoable) S.last={ids, prev};
-  const changes=ids.map(id=>({id, s:rec.s, c:rec.c||""}));
+  const changes=ids.map(id=>({id, s:rec.s, c:rec.c||"", l:rec.l||"", st:rec.st||"", nm:rec.nm||"", cy:rec.cy||"", n:rec.n||""}));
   const send = async()=>{
     try { await api(null,{key:S.key, name:S.name, changes}); }
     catch(e){ if (e.code!=="unavailable") throw e; await new Promise(r=>setTimeout(r,800+Math.random()*800)); await api(null,{key:S.key, name:S.name, changes}); }
@@ -337,13 +376,14 @@ function decideIds(ids, rec, {undoable=true, quiet=false}={}){
 function describe(ids, d){
   const n=`“${S.byId[ids[0]].source_name}”` + (ids.length>1?` and ${ids.length-1} other spelling${ids.length>2?"s":""}`:"");
   if (d.s==="match") return `Linked ${n} to ${targetLabel(d.c).name}`;
+  if (d.s==="new") return `Saved ${n} as a new school: ${d.nm}`;
   if (d.s==="research") return `Sent ${n} to the research list`;
   if (d.s==="nohs") return `Marked ${n} as not a high school`;
   return `Returned ${n} to the queue`;
 }
 function undo(){
   if (!S.last) return; const {ids,prev}=S.last; S.last=null;
-  Promise.all(ids.map(id=>decideIds([id], {s:prev[id].s, ...(prev[id].c?{c:prev[id].c}:{})}, {undoable:false, quiet:true})))
+  Promise.all(ids.map(id=>{ const {u,t,...p}=prev[id]; return decideIds([id], p, {undoable:false, quiet:true}); }))
     .then(ok=>{ if (ok.every(Boolean)) { toast(`Undid the decision on “${S.byId[ids[0]].source_name}”`); S.cur=ids[0]; renderAll(); }});
   S.cur=ids[0]; renderAll();
 }
@@ -388,7 +428,9 @@ async function renderWork(){
   const w=$("work"); const id=S.cur; const a=S.byId[id];
   if (!a) { w.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing left in this view"),el("p",{},S.q||S.st||S.src!=="all"?"Clear the filters to see the rest of the queue.":"Every school name has a decision. New Verified names appear after the next refresh."))); return; }
   const st=a.state||"INTL";
+  const f=formFor(a); const college=COLLEGE.has(f.l);
   const pool=await loadCeeb(st);
+  if (college) await loadColleges();
   if (S.cur!==id) return;
   const hometowns=(a.hometowns||"").split(";").map(s=>s.trim()).filter(Boolean);
   const facts=el("div",{class:"facts"},
@@ -401,27 +443,34 @@ async function renderWork(){
     hometowns.length?el("span",{},"Athlete hometowns ",el("b",{},hometowns.join(" · "))):null,
     a.source_school_id?el("span",{class:"mono"},`${NAMES[a.source]||a.source} id ${a.source_school_id.split(";")[0]}`):null);
 
-  // Candidates: schools other sources already linked from look-alike names, then the ranked CEEB matches.
+  // Candidates: Claude's guesses and what each evidence source pointed to, then schools other sources already
+  // linked from look-alike names, then the ranked CEEB matches. Colleges are searched in the college list instead.
   const rows=[]; const seen=new Set();
+  const guesses={}; for (const [label,code,name,city] of a.hints||[]) (guesses[code] ||= {code, labels:[], fb:{name,city}}).labels.push(label);
+  if (!college) for (const g of Object.values(guesses)) { seen.add(g.code); rows.push(g); }
   for (const pid of a.peers||[]) { const d=S.dec[pid]; if (d && d.s==="match" && !seen.has(d.c)) { seen.add(d.c); rows.push({code:d.c, hint:S.byId[pid]}); } }
-  for (const [code,score] of a.candidates||[]) if (!seen.has(code)) { seen.add(code); rows.push({code,score}); }
+  if (!college) for (const [code,score] of a.candidates||[]) if (!seen.has(code)) { seen.add(code); rows.push({code,score}); }
   let shown=rows.slice(0,9);
   const twins=openMembers(id).filter(x=>x!==id).map(x=>S.byId[x]);
   const peersOpen=(a.peers||[]).map(p=>S.byId[p]).filter(p=>p && isOpen(p.alias_id) && p.group!==a.group);
-  if (a.exact && !shown.some(r=>r.code===a.exact)) shown=[{code:a.exact},...shown].slice(0,9);
+  if (a.exact && !college && !shown.some(r=>r.code===a.exact)) shown=[{code:a.exact},...shown].slice(0,9);
+  if (college && !S.searchQ) S.searchQ=a.source_name.replace(/\s*\([^()]*\)\s*$/,"");
 
   const cands=el("div",{class:"cands"});
   shown.forEach((r,i)=>cands.append(candRow(r,i+1,id)));
-  if (!shown.length) cands.append(el("div",{class:"cand"},el("span"),el("span",{class:"muted"},a.state?"No close names in this state's CEEB list. Search below, or send it to research.":"This name has no state. Search the CEEB list below."),el("span")));
+  if (!shown.length && !college) cands.append(el("div",{class:"cand"},el("span"),el("span",{class:"muted"},a.state?"No close names in this state's CEEB list. Search below, or send it to research.":"This name has no state. Search the CEEB list below."),el("span")));
 
-  const sQ=el("input",{id:"ceebSearch",type:"search",placeholder:"Search the CEEB list by name, city, or code",value:S.searchQ,"aria-label":"Search CEEB list"});
+  const sQ=el("input",{id:"ceebSearch",type:"search",placeholder:college?"Search the college list by name, city, or code":"Search the CEEB list by name, city, or code",value:S.searchQ,"aria-label":"Search CEEB list"});
   const sSt=el("select",{id:"ceebState","aria-label":"State to search"});
-  for (const s of new Set([st,...[...$("stateSel").options].map(o=>o.value).filter(Boolean),"INTL"])) sSt.append(el("option",{value:s, selected:(S.searchSt||st)===s},s));
+  const sDef=S.searchSt||(college&&!a.state?"":st);
+  if (college) sSt.append(el("option",{value:"", selected:sDef===""},"All states"));
+  for (const s of new Set([st,...[...$("stateSel").options].map(o=>o.value).filter(v=>v&&v!==NO_STATE),"INTL"])) sSt.append(el("option",{value:s, selected:sDef===s},s));
   const results=el("div",{class:"cands",id:"searchResults",hidden:true});
   const runSearch=async()=>{
     S.searchQ=sQ.value; S.searchSt=sSt.value; const q=sQ.value.trim();
     if (q.length<2) { results.hidden=true; return; }
-    const m=await loadCeeb(sSt.value); const nq=norm(q); const toks=nq.split(" ").filter(Boolean); const lq=q.toLowerCase();
+    const m=college ? Object.fromEntries(Object.entries(await loadColleges()).filter(([,c])=>!sSt.value||c.st===sSt.value)) : await loadCeeb(sSt.value);
+    const nq=norm(q); const toks=nq.split(" ").filter(Boolean); const lq=q.toLowerCase();
     const scored=[];
     for (const c of Object.values(m||{})) {
       let sc=0; if (c.c===q || c.alts.includes(q)) sc=200; else {
@@ -430,41 +479,63 @@ async function renderWork(){
       if (sc>0) scored.push([sc,c.c]);
     }
     scored.sort((x,y)=>y[0]-x[0]);
-    results.replaceChildren(...(scored.length?scored.slice(0,15).map(([,c])=>candRow({code:c},null,id)):[el("div",{class:"cand"},el("span"),el("span",{class:"muted"},`No ${sSt.value} schools match “${q}”.`),el("span"))]));
+    results.replaceChildren(...(scored.length?scored.slice(0,15).map(([,c])=>candRow({code:c},null,id)):[el("div",{class:"cand"},el("span"),el("span",{class:"muted"},`No ${sSt.value} ${college?"colleges":"schools"} match “${q}”.`),el("span"))]));
     results.hidden=false;
   };
   sQ.addEventListener("input",runSearch); sSt.addEventListener("change",runSearch);
 
   const can=S.canWrite!==false && !!S.db;
-  w.replaceChildren(
+  // Level, state and notes for the school code; saved with whichever decision is made.
+  const lv=el("div",{class:"seg",role:"group","aria-label":"Level"},...LEVELS.map(([k,t])=>el("button",{"aria-pressed":String(f.l===k),title:t,onclick:()=>{const was=COLLEGE.has(f.l); f.l=k; if (was!==COLLEGE.has(k)) { S.searchQ=""; S.searchSt=""; } renderWork();}},k)));
+  const stIn=el("input",{id:"stcode",value:f.st,maxlength:"2","aria-label":"State code",title:"2-letter state or province, XX if none",style:"text-transform:uppercase;width:4em"});
+  stIn.addEventListener("input",()=>{ f.st=stIn.value.toUpperCase().trim(); });
+  const nIn=el("input",{id:"notes",value:f.n,placeholder:"Notes (optional)","aria-label":"Notes",style:"flex:1 1 220px"});
+  nIn.addEventListener("input",()=>{ f.n=nIn.value; });
+  const decideBox=el("div",{class:"decide"},
+    el("div",{class:"row"},el("span",{class:"label"},"Level"),lv, el("span",{class:"label"},"State"),stIn),
+    a.level_hint && a.level_hint!==f.l ? el("div",{class:"muted",style:"font-size:12px"},"Suggestion: "+a.level_hint) : null,
+    el("div",{class:"row"},nIn));
+  const nmIn=el("input",{id:"newName",value:f.nm,"aria-label":"New school name",placeholder:"School or team name",style:"flex:2 1 200px"});
+  nmIn.addEventListener("input",()=>{ f.nm=nmIn.value; });
+  const cyIn=el("input",{id:"newCity",value:f.cy,"aria-label":"New school city",placeholder:"City",style:"flex:1 1 120px"});
+  cyIn.addEventListener("input",()=>{ f.cy=cyIn.value; });
+  const newForm=el("div",{class:"newform"},
+    el("span",{class:"label"},"No College Board code? Save it as a new school"),
+    el("div",{class:"row"},nmIn,cyIn,el("button",{disabled:!can,onclick:()=>decideCard(id,{s:"new"}),title:"It gets our own ID (level + state + 6 digits) when the decisions are exported"},"Save as new school ",el("kbd",{},"N"))));
+  w.replaceChildren(...[
     el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?")), el("h2",{},a.source_name), facts),
+    a.note?el("div",{class:"note"},el("b",{},"Why it's here: "),a.note):null,
+    decideBox,
     twins.length?el("div",{class:"twins"},el("span",{class:"label"},"Same school, other spellings · decided together"),
       ...twins.map(t=>el("div",{class:"twin"},srcTag(t.source),el("b",{},t.source_name),
         el("span",{class:"muted"},[t.city,t.state].filter(Boolean).join(", ")+(t.n_athletes?` · ${t.n_athletes} athletes`:""))))):null,
     peersOpen.length?el("div",{class:"chips"},el("span",{class:"label",style:"align-self:center"},"Similar names still waiting"),...peersOpen.map(p=>el("button",{class:"chip",onclick:()=>{S.cur=p.alias_id;renderAll();}},srcTag(p.source),p.source_name))):null,
-    el("div",{class:"label"},"Closest CEEB schools"),
-    cands,
+    college?null:el("div",{class:"label"},Object.keys(guesses).length?"Claude's guesses, then the closest CEEB schools":"Closest CEEB schools"),
+    college?(Object.keys(guesses).length?el("div",{class:"muted",style:"font-size:13px"},"Claude's guesses were high schools: "+Object.values(guesses).map(g=>g.fb.name+", "+g.fb.city).join(" · ")):null):cands,
+    college?el("div",{class:"label"},"College Board colleges (4-digit codes)"):null,
     el("div",{class:"searchbox"}, el("div",{class:"row"},sSt,sQ), results),
+    newForm,
     el("div",{class:"actions"},
-      el("button",{onclick:()=>decide(id,{s:"research"}),disabled:!can,title:"Can't find it in the active CEEB list. It goes to the research file and stays out of the final tables."},"Needs research ",el("kbd",{},"R")),
-      el("button",{onclick:()=>decide(id,{s:"nohs"}),disabled:!can,title:"A college, middle school, or placeholder like Home Schooled"},"Not a high school ",el("kbd",{},"X")),
+      el("button",{onclick:()=>decideCard(id,{s:"research"}),disabled:!can,title:"Can't tell yet. It goes to the research list."},"Needs research ",el("kbd",{},"R")),
+      isNew(a)?null:el("button",{onclick:()=>decideCard(id,{s:"nohs"}),disabled:!can,title:"A college, middle school, or placeholder like Home Schooled"},"Not a high school ",el("kbd",{},"X")),
       el("button",{onclick:skip},"Skip for now ",el("kbd",{},"S")),
       S.last?el("button",{onclick:undo},"Undo last ",el("kbd",{},"Z")):null)
-  );
+  ].filter(x=>x!=null));   // leave out the parts that don't apply to this card
   if (S.searchQ) runSearch();
 }
 function skip(){ if (!S.cur) return; S.skipped.add(S.cur); const list=queue().filter(a=>!S.skipped.has(a.alias_id)); S.cur=(list[0]||{}).alias_id||S.cur; renderAll(); }
 
 function candRow(r, key, id){
-  const t=targetLabel(r.code); const info=ceebInfo(r.code);
+  const t=targetLabel(r.code, r.fb); const info=ceebInfo(r.code);
   const linked=(S.links[r.code]||[]).map(x=>S.byId[x]).filter(Boolean);
   const can=S.canWrite!==false && !!S.db;
   return el("div",{class:"cand"},
     el("span",{class:"key"},key||""),
     el("div",{style:"min-width:0"},
       el("div",{class:"title"},t.name, id && S.byId[id]?.exact===r.code ? el("span",{class:"exact"},"Exact name match") : null),
+      r.labels?el("div",{class:"chips"},...r.labels.map(l=>el("span",{class:"chip guess"},l))):null,
       el("div",{class:"meta"},
-        el("span",{class:"mono"},"CEEB "+r.code),
+        el("span",{class:"mono"},(/^\d{4}$/.test(r.code)?"College code ":"CEEB ")+r.code),
         t.city?el("span",{},t.city):null, info&&info.zip?el("span",{class:"mono"},info.zip):null,
         info&&info.addr?el("span",{},info.addr):null, info&&info.detail?el("span",{},info.detail):null,
         info&&info.alts.length?el("span",{class:"mono",title:"The College Board lists this school under more than one code. Either one is the same school."},"also listed as CEEB "+info.alts.join(", ")):null),
@@ -472,7 +543,7 @@ function candRow(r, key, id){
       linked.length?el("div",{class:"chips"},...linked.slice(0,6).map(x=>el("span",{class:"chip"},srcTag(x.source),x.source_name)), linked.length>6?el("span",{class:"chip"},`+${linked.length-6} more`):null):null),
     el("div",{class:"right"},
       r.score!=null?el("span",{class:"score",title:`Name similarity ${r.score} of 100`},el("i",{style:`width:${r.score}%`})):null,
-      el("button",{class:"primary",disabled:!can,onclick:()=>decide(id,{s:"match",c:r.code})},"Same school")));
+      el("button",{class:"primary",disabled:!can,onclick:()=>decideCard(id,{s:"match",c:r.code})},"Same school")));
 }
 
 /* ---------- linked view ---------- */
@@ -491,18 +562,20 @@ async function renderLinked(){
   }
   const statesNeeded=new Set(groups.flatMap(g=>g.ids.map(i=>S.byId[i]?.state||"INTL")));
   await Promise.all([...statesNeeded].map(loadCeeb));
+  if (groups.some(g=>/^\d{4}$/.test(g.code||""))) await loadColleges();
   let shownGroups=groups.filter(g=>!q || (g.code||"").toLowerCase().includes(q) || (g.code && targetLabel(g.code).name.toLowerCase().includes(q)) || g.ids.some(i=>S.byId[i].source_name.toLowerCase().includes(q)));
   shownGroups.sort((x,y)=>(x.code?targetLabel(x.code).name:"").localeCompare(y.code?targetLabel(y.code).name:""));
   const nAliases=shownGroups.reduce((s,g)=>s+g.ids.length,0);
-  $("lcount").textContent = kind==="nohs" ? `${nAliases.toLocaleString()} names marked not a high school` : kind==="research" ? `${nAliases.toLocaleString()} names to research` : `${shownGroups.length.toLocaleString()} schools · ${nAliases.toLocaleString()} names`;
-  if (!shownGroups.length) { box.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing here yet"),el("p",{},kind==="match"?"Schools appear here once someone links a name in the queue.":kind==="research"?"Names appear here when someone can't find them in the CEEB list.":"Names marked not a high school appear here."))); return; }
+  $("lcount").textContent = kind==="nohs" ? `${nAliases.toLocaleString()} names marked not a high school` : kind==="new" ? `${nAliases.toLocaleString()} names saved as new schools` : kind==="research" ? `${nAliases.toLocaleString()} names to research` : `${shownGroups.length.toLocaleString()} schools · ${nAliases.toLocaleString()} names`;
+  if (!shownGroups.length) { box.replaceChildren(el("div",{class:"empty"},el("h2",{},"Nothing here yet"),el("p",{},kind==="match"?"Schools appear here once someone links a name in the queue.":kind==="new"?"Names appear here when someone saves a school that has no College Board code.":kind==="research"?"Names appear here when someone can't find them in the CEEB list.":"Names marked not a high school appear here."))); return; }
   box.replaceChildren(...shownGroups.slice(0,200).map(g=>{
     const t=g.code?targetLabel(g.code):null; const info=g.code?ceebInfo(g.code):null;
     const sch=el("div",{class:"school"});
     if (t) sch.append(el("div",{class:"head"},el("h3",{},t.name), el("span",{class:"mono muted"},"CEEB "+g.code), t.city?el("span",{class:"muted"},t.city):null, info&&info.zip?el("span",{class:"mono muted"},info.zip):null));
     for (const i of g.ids) {
       const a=S.byId[i]; const d=S.dec[i]; const who=d.u||"Someone";
-      sch.append(el("div",{class:"alias"},srcTag(a.source), el("span",{style:"min-width:0;overflow-wrap:anywhere"},a.source_name, el("span",{class:"muted"},` · ${who}, ${new Date(d.t).toLocaleDateString()}`)),
+      const extra=[d.s==="new"?`→ ${d.nm}${d.cy?", "+d.cy:""}`:"", d.l?`${d.l}-${d.st||"XX"}`:"", d.n?`“${d.n}”`:""].filter(Boolean).join(" · ");
+      sch.append(el("div",{class:"alias"},srcTag(a.source), el("span",{style:"min-width:0;overflow-wrap:anywhere"},a.source_name, extra?el("span",{}," "+extra):null, el("span",{class:"muted"},` · ${who}, ${new Date(d.t).toLocaleDateString()}`)),
         el("button",{disabled:S.canWrite===false||!S.db,onclick:()=>{decide(i,{s:"open"});renderAll();}},"Back to queue")));
     }
     return sch;
@@ -513,7 +586,8 @@ async function exportRows(){
   const ids=Object.keys(S.dec).filter(id=>S.byId[id] && !isOpen(id));
   return ids.map(id=>{ const a=S.byId[id], d=S.dec[id];
     return {alias_id:id, source:a.source, source_school_id:a.source_school_id, source_name:a.source_name, state:a.state,
-      decision:d.s, ceeb_code:d.c||"", decided_by:d.u||"", decided_at:d.t}; });
+      decision:d.s, ceeb_code:d.c||"", level:d.l||"", state_code:d.st||"", new_name:d.nm||"", new_city:d.cy||"", notes:d.n||"",
+      decided_by:d.u||"", decided_at:d.t}; });
 }
 function save(filename, data){
   const url=URL.createObjectURL(new Blob([data],{type:filename.endsWith(".csv")?"text/csv":"application/json"}));
@@ -522,7 +596,7 @@ function save(filename, data){
 }
 $("dlJson").onclick=async()=>{ const rows=await exportRows(); const stamp=new Date().toISOString().slice(0,10);
   save(`hs_decisions_${stamp}.json`, JSON.stringify({exported_at:new Date().toISOString(), queue_built_at:S.builtAt, decisions:rows},null,1)); };
-$("dlCsv").onclick=async()=>{ const rows=await exportRows(); const cols=["alias_id","source","source_school_id","source_name","state","decision","ceeb_code","decided_by","decided_at"];
+$("dlCsv").onclick=async()=>{ const rows=await exportRows(); const cols=["alias_id","source","source_school_id","source_name","state","decision","ceeb_code","level","state_code","new_name","new_city","notes","decided_by","decided_at"];
   const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
   save(`hs_alias_${new Date().toISOString().slice(0,10)}.csv`, [cols.join(","),...rows.map(r=>cols.map(c=>q(r[c])).join(","))].join("\n")); };
 
@@ -533,7 +607,7 @@ function renderStats(){
     if (!inScope(S.byId[ids[0]])) continue; total++;
     const o=ids.filter(isOpen);
     if (o.length) { open++; continue; }
-    const d=S.dec[ids[0]].s; if (d==="match") m++; else if (d==="research") p++; else x++;
+    const d=S.dec[ids[0]].s; if (d==="match"||d==="new") m++; else if (d==="research") p++; else x++;
   }
   const pct=v=>total?(100*v/total)+"%":"0";
   $("stats").replaceChildren(
@@ -560,8 +634,9 @@ document.addEventListener("keydown",e=>{
   const tag=(e.target.tagName||"").toLowerCase(); if (tag==="input"||tag==="select"||tag==="textarea") { if (e.key==="Escape") e.target.blur(); return; }
   const id=S.cur; if (!id) return;
   if (/^[1-9]$/.test(e.key)) { const btn=$("work").querySelectorAll(".cands:not(#searchResults) .cand button.primary")[+e.key-1]; if (btn && !btn.disabled) { e.preventDefault(); btn.click(); } }
-  else if (e.key==="r"||e.key==="R") { e.preventDefault(); if (S.canWrite!==false && S.db) decide(id,{s:"research"}); }
-  else if (e.key==="x"||e.key==="X") { e.preventDefault(); if (S.canWrite!==false && S.db) decide(id,{s:"nohs"}); }
+  else if (e.key==="r"||e.key==="R") { e.preventDefault(); if (S.canWrite!==false && S.db) decideCard(id,{s:"research"}); }
+  else if ((e.key==="x"||e.key==="X") && !isNew(S.byId[id])) { e.preventDefault(); if (S.canWrite!==false && S.db) decideCard(id,{s:"nohs"}); }
+  else if (e.key==="n"||e.key==="N") { e.preventDefault(); if (S.canWrite!==false && S.db) decideCard(id,{s:"new"}); }
   else if (e.key==="s"||e.key==="S") { e.preventDefault(); skip(); }
   else if (e.key==="z"||e.key==="Z") { e.preventDefault(); undo(); }
   else if (e.key==="/") { e.preventDefault(); $("ceebSearch")?.focus(); }
