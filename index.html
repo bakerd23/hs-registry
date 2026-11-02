@@ -202,6 +202,9 @@ const NAMES = {va:"Verified", espn:"ESPN", tf:"Tracking Football", uc:"UC Report
 // School code levels (<LEVEL>-<ST>-<6-digit ID>). Colleges link to 4-digit College Board codes.
 const LEVELS = [["HS","High school (incl. homeschool)"],["JUCO","Junior / community college"],["NAIA","NAIA college"],["NCAA","NCAA college"],["NFL","NFL team"],["INTL","Outside the US and Canada"],["OTHR","Anything else: club team, middle school…"]];
 const COLLEGE = new Set(["JUCO","NAIA","NCAA"]);
+// Quebec CEGEPs are entered as high schools (decided Nov 2): their cards get a note and default to HS / QC.
+const CEGEP_RE = /\bc[ée]gep\b|\bvanier coll|\bchamplain|\bgarneau\b|andr[ée][\s-]*grasset|notre[\s-]*dame[\s-]*de[\s-]*foy|vieux[\s-]*montr|marianopolis|\bdawson coll|john abbott|heritage coll|\bcoll[eè]ge (de |du |d')?(maisonneuve|ahuntsic|bois|lionel|montmorency|sainte?[\s-]foy|limoilou|l[eé]vis|thetford|jonqui|rimouski|valleyfield|saint[\s-]jean[\s-]sur|[ée]douard|lafl[eè]che|shawinigan|trois|sherbrooke|lanaudi|rosemont)/i;
+const isCegep = a => CEGEP_RE.test(a.source_name) && (!a.state || /^(QC|ON|NB|NS|CAN)$/.test(a.state));
 const DROP = new Set("high school hs h s sch schl senior sr the of and secondary jr junior shs hsch".split(" "));
 const EXPAND = {acad:"academy",academ:"academy",prep:"preparatory",st:"saint",ste:"sainte",mt:"mount",ft:"fort",cath:"catholic",cathol:"catholic",chr:"christian",chrstn:"christian",christ:"christian",cmty:"community",comm:"community",ctr:"center",cntr:"center",twp:"township",regl:"regional",reg:"regional",rgnl:"regional",co:"county",cnty:"county",intl:"international",hts:"heights",jt:"joint",n:"north",e:"east",w:"west",no:"north",so:"south",cent:"central",ctrl:"central",mem:"memorial",meml:"memorial",tech:"technical",voc:"vocational",magn:"magnet",inst:"institute",ind:"independent",isd:"independent",pk:"park",spgs:"springs",vly:"valley",lk:"lake",hls:"hills",bch:"beach"};
 function norm(s){
@@ -289,7 +292,7 @@ function targetLabel(code, fallback){
 const isNew = a => a && (a.source==="tf" || a.source==="uc");
 // The level / state / notes the person has set on the current card; reset when the card changes.
 function formFor(a){
-  if (S.formFor!==a.alias_id) { S.formFor=a.alias_id; S.form={l:a.default_level||(isNew(a)?"":"HS"), st:a.state||"XX", n:"", nm:a.source_name, cy:a.city||""}; }
+  if (S.formFor!==a.alias_id) { S.formFor=a.alias_id; S.form={l:isCegep(a)?"HS":a.default_level||(isNew(a)?"":"HS"), st:isCegep(a)?"QC":a.state||"XX", n:"", nm:a.source_name, cy:a.city||""}; }
   return S.form;
 }
 
@@ -531,7 +534,7 @@ async function renderWork(){
   nIn.addEventListener("input",()=>{ f.n=nIn.value; });
   const decideBox=el("div",{class:"decide"},
     el("div",{class:"row"},el("span",{class:"label"},"Level"),lv, el("span",{class:"label"},"State"),stIn),
-    a.level_hint && a.level_hint!==f.l ? el("div",{class:"muted",style:"font-size:12px"},"Suggestion: "+a.level_hint) : null,
+    a.level_hint && a.level_hint!==f.l && !isCegep(a) ? el("div",{class:"muted",style:"font-size:12px"},"Suggestion: "+a.level_hint) : null,
     el("div",{class:"row"},nIn));
   const nmIn=el("input",{id:"newName",value:f.nm,"aria-label":"New school name",placeholder:"School or team name",style:"flex:2 1 200px"});
   nmIn.addEventListener("input",()=>{ f.nm=nmIn.value; });
@@ -544,7 +547,10 @@ async function renderWork(){
     el("div",{class:"row"},nmIn,cyIn,el("button",{disabled:!can,onclick:()=>decideCard(id,{s:"new"}),title:"It gets our own ID (level + state + 6 digits) when the decisions are exported"},"Save as new school ",el("kbd",{},"N"))));
   w.replaceChildren(...[
     el("div",{class:"subject"}, el("div",{class:"row"},srcTag(a.source),el("span",{class:"label"},"Which school is this?")), el("h2",{},a.source_name), facts),
-    a.note?el("div",{class:"note"},el("b",{},"Why it's here: "),a.note):null,
+    a.note && !(isCegep(a) && /CEGEP/i.test(a.note))?el("div",{class:"note"},el("b",{},"Why it's here: "),a.note):null,
+    isCegep(a)?el("div",{class:"note"},el("b",{},"CEGEP: "),"enter Quebec CEGEPs as high schools, level HS and state QC. "+
+      "Players go from a CEGEP to university as freshmen, like a US high school senior, and the College Board lists CEGEPs as high schools. "+
+      "Link its 6-digit code if it has one; otherwise save it as a new school."):null,
     decideBox,
     twins.length?el("div",{class:"twins"},el("span",{class:"label"},"Same school, other spellings · decided together"),
       ...twins.map(t=>el("div",{class:"twin"},srcTag(t.source),el("b",{},t.source_name),
